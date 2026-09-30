@@ -23,6 +23,85 @@ The package is not released yet. Once it is, install it from PyPI:
 uv add weclapp-client
 ```
 
+Until then, a pre-release can be installed from a git tag:
+
+```bash
+uv add "weclapp-client @ git+https://github.com/Hochfrequenz/weclapp_client.py@v0.1.0a1"
+```
+
+## Usage
+
+```python
+from datetime import date
+
+from weclapp_client import Filter, WeclappClient, WeclappConfig
+from weclapp_client.models import CustomAttribute, EmployeeCreate, EmployeeUpdate, UserCreate, UserStatus
+
+# reads WECLAPP_API_TOKEN and WECLAPP_BASE_URL (or WECLAPP_TENANT)
+with WeclappClient(WeclappConfig.from_env()) as client:
+    definition = client.custom_attribute_definitions.get_by_key("personalnummer")
+    user = client.users.find_one(Filter.custom_attribute_eq(definition.id, "00042"))
+    if user is None:
+        user = client.users.create(
+            UserCreate(
+                email="erika.musterfrau@example.com",
+                first_name="Erika",
+                last_name="Musterfrau",
+                status=UserStatus.NOT_ACTIVE,
+                custom_attributes=[CustomAttribute.of_string(definition.id, "00042")],
+            )
+        )
+    employee = client.employees.for_user(user.id)
+    if employee is None:
+        client.employees.create(EmployeeCreate(user_id=user.id, birth_date=date(1985, 4, 12)))
+    elif employee.birth_date != date(1985, 4, 12):
+        client.employees.update(employee, EmployeeUpdate(birth_date=date(1985, 4, 12)))
+```
+
+- `iterate()`/`list()` page through all entities; `properties=[...]` loads only the given properties
+  (`id` and `version` are always included).
+- `find_one()` returns `None` if nothing matches and raises `AmbiguousResultError` if more than one entity matches.
+- `create()` and `update()` accept `dry_run=True`: weclapp validates the data without storing it, and the method
+  returns `None` (weclapp does not assign ids in dry runs).
+- Read models (`User`, `Employee`, ...) guarantee `id` and `version`. Write models (`UserCreate`, `UserUpdate`, ...)
+  only contain writable properties.
+
+### Behaviour guarantees
+
+- **A `POST` is not retried if its outcome is unclear** (read timeout, HTTP 502–504), because the entity might
+  already exist. Look up an entity before creating it, so that a repeated run does not create duplicates.
+  `429 Too Many Requests` and failed connection attempts are retried for all methods, `GET`/`PUT` also on
+  gateway errors and timeouts (exponential backoff with jitter, `max_retries` in `WeclappConfig`).
+- **Updates are partial** (`ignoreMissingProperties=true`) and send the `version` of the entity passed in. If the
+  entity changed in the meantime, `OptimisticLockError` is raised: read it again and re-apply the changes.
+- **Custom attributes:** an update only sends the attributes passed in; weclapp keeps the values of all others.
+- **Filters are checked before a request is sent.** weclapp silently ignores filters on unknown properties, which
+  would turn a lookup into a query for all entities; the client raises `InvalidQueryError` instead.
+- **No personal data in logs:** the logger `weclapp_client` only logs method, path and status. The API token never
+  appears in logs, `repr` or exceptions.
+- Unknown properties in responses are ignored, unknown enum values are kept as strings.
+- Date-only fields (e.g. `birth_date`) are written as midnight UTC; when reading, timestamps are rounded to the
+  nearest midnight, so dates stored at local midnight (e.g. Europe/Berlin) are read correctly.
+
+### Exceptions
+
+All exceptions derive from `WeclappError`. Errors returned by weclapp derive from `WeclappApiError`
+(with `status_code`, `problem_type`, `detail` and `validation_errors`).
+
+| Exception                  | Cause                                           | Typically                   |
+|----------------------------|-------------------------------------------------|-----------------------------|
+| `WeclappConnectionError`   | network error or timeout after all retries      | systemic, abort the run     |
+| `AuthenticationError`      | HTTP 401, invalid token                         | systemic                    |
+| `PermissionDeniedError`    | HTTP 403                                        | systemic                    |
+| `RateLimitError`           | HTTP 429 after all retries                      | systemic                    |
+| `ServerError`              | HTTP 5xx                                        | systemic                    |
+| `WeclappValidationError`   | HTTP 400, see `validation_errors`               | concerns one record         |
+| `NotFoundError`            | HTTP 404                                        | concerns one record         |
+| `OptimisticLockError`      | HTTP 409, entity changed in the meantime        | concerns one record, retry  |
+| `ConflictError`            | other HTTP 409                                  | concerns one record         |
+| `InvalidQueryError`        | unknown property in a filter, sort or selection | programming error           |
+| `AmbiguousResultError`     | `find_one()` matched several entities           | data problem                |
+
 ## Development
 
 This project uses [uv](https://docs.astral.sh/uv/) to manage the Python interpreter, the virtual environment and the
