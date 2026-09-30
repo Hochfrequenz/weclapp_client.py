@@ -1,0 +1,12 @@
+{
+  "id": "5100",
+  "version": "1",
+  "createdDate": 1700000000000,
+  "lastModifiedDate": 1700000500000,
+  "employeeNumber": "1001",
+  "userId": "4711",
+  "birthDate": 482112000000,
+  "employmentStatus": "ACTIVE",
+  "privateAddress": { "city": "Musterstadt", "countryCode": "DE" },
+  "workingTimeRuleAssignments": []
+}

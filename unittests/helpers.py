@@ -2,7 +2,9 @@
 Helpers shared by the unit tests.
 """
 
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -54,3 +56,12 @@ def problem(status: int, problem_type: str, title: str, **extra: Any) -> httpx.R
     }
     body.update(extra)
     return httpx.Response(status, json=body)
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def load_fixture(name: str) -> dict[str, Any]:
+    """Loads a synthetic example response from ``unittests/fixtures/<name>.json``."""
+    result: dict[str, Any] = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+    return result
