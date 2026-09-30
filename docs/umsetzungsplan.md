@@ -146,7 +146,6 @@ weclapp REST API v2            in Tests ersetzt durch weclapp_client.testing.Fak
 src/weclapp_client/
 ├── __init__.py                 # öffentliche API: WeclappClient, WeclappConfig, Filter, Exceptions
 ├── py.typed
-├── _version.py                 # von hatch-vcs erzeugt, nicht eingecheckt
 ├── config.py                   # WeclappConfig (inkl. from_env)
 ├── exceptions.py               # Exception-Hierarchie
 ├── _http.py                    # Transport: Header, Auth, Timeouts, Retry, Fehler-Mapping
@@ -241,8 +240,9 @@ Summe: ca. 6,5–8,5 PT, Wartezeiten nicht eingerechnet.
   - `name = "weclapp-client"`, Beschreibung, Autoren und Keywords setzen, URLs auf
     `Hochfrequenz/weclapp_client.py` umstellen.
   - Laufzeit-Abhängigkeiten `httpx` und `pydantic` mit Untergrenze (siehe 2.1).
-  - `version-file` auf `src/weclapp_client/_version.py` umstellen, `.gitignore` entsprechend
-    anpassen.
+  - Die Version kommt weiter aus den Git-Tags (hatch-vcs), zur Laufzeit liest das Paket sie
+    über `importlib.metadata`. Die generierte Versionsdatei des Templates entfällt samt
+    `.gitignore`-Eintrag.
   - mypy: `plugins = ["pydantic.mypy"]`. pytest: Marker `integration` registrieren.
 - CI und Pre-commit: den Pfad `src/mypackage` in `pythonlint.yml` und
   `.pre-commit-config.yaml` ersetzen. **Die Job-Namen bleiben unverändert**, weil sie als

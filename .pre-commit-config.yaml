@@ -11,5 +11,5 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
-        files: ^(src/mypackage|unittests)/
+        files: ^(src/weclapp_client|unittests)/
       - id: ruff-format

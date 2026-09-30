@@ -1,13 +1,12 @@
 [project]
-name = "your-favourite-package-name"
-description = "Description of your package"
+name = "weclapp-client"
+description = "Typed Python client for the weclapp REST API v2, focused on employee master data"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [{ name = "your name", email = "your@email.address" }]
-keywords = ["your", "important", "keywords"]
+authors = [{ name = "Nicola Söker", email = "nicola.soeker@hochfrequenz.de" }]
+keywords = ["weclapp", "erp", "api", "client", "rest", "employee"]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Environment :: Console",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -17,13 +16,15 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
 ]
-dependencies = []     # add all the dependencies here
+# lower bounds only (no pins): this is a library that is installed next to the dependencies of the sync repository
+dependencies = ["httpx>=0.28", "pydantic>=2.11"]
 dynamic = ["readme", "version"]
 
 [project.urls]
-Changelog = "https://github.com/Hochfrequenz/python_template_repository/releases"
-Homepage = "https://github.com/Hochfrequenz/python_template_repository"
+Changelog = "https://github.com/Hochfrequenz/weclapp_client.py/releases"
+Homepage = "https://github.com/Hochfrequenz/weclapp_client.py"
 
 [dependency-groups]
 tests = ["pytest==9.1.1"]
@@ -64,6 +65,18 @@ ignore = [
 
 [tool.mypy]
 disable_error_code = []
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["unittests"]
+markers = [
+    "integration: runs against a real weclapp tenant, needs WECLAPP_BASE_URL and WECLAPP_API_TOKEN",
+]
 
 [build-system]
 requires = ["hatchling>=1.29.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
@@ -73,14 +86,9 @@ build-backend = "hatchling.build"
 content-type = "text/markdown"
 fragments = [{ path = "README.md" }]
 
+# the version is derived from git tags; at runtime it is read via importlib.metadata (see weclapp_client/__init__.py)
 [tool.hatch.version]
 source = "vcs"
-
-[tool.hatch.build.hooks.vcs]
-version-file = "src/_your_package_version.py"
-template = '''
-version = "{version}"
-'''
 
 [tool.hatch.build.targets.sdist]
 exclude = ["/unittests"]

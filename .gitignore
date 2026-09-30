@@ -133,4 +133,6 @@ dmypy.json
 # vscode settings
 .vscode/
 
-src/_your_package_version.py
+
+# pytest basetemp used by the coverage workflow
+.tmp/
