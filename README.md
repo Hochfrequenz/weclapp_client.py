@@ -170,6 +170,11 @@ uv run mypy --show-error-codes unittests --strict
 uv run codespell --ignore-words=domain-specific-terms.txt src README.md
 ```
 
+Integration tests against a real weclapp tenant live in `unittests/integration/` and are skipped unless
+`WECLAPP_API_TOKEN` and `WECLAPP_BASE_URL` (or `WECLAPP_TENANT`) are set. Tests marked `integration` only read and
+send dry runs; tests marked `integration_write` create test records and additionally need `WECLAPP_ALLOW_WRITES=1`.
+See [docs/integrationstests.md](docs/integrationstests.md) (German).
+
 ## Releasing
 
 Versions are derived from git tags (`v0.1.0`, `v0.1.0a1`, ...) via hatch-vcs.

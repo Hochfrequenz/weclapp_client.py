@@ -76,7 +76,8 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 testpaths = ["unittests"]
 markers = [
-    "integration: runs against a real weclapp tenant, needs WECLAPP_BASE_URL and WECLAPP_API_TOKEN",
+    "integration: reads and dry runs against a real weclapp tenant (safe for production), see docs/integrationstests.md",
+    "integration_write: creates test records in a real weclapp tenant, additionally needs WECLAPP_ALLOW_WRITES=1",
 ]
 
 [build-system]

@@ -14,7 +14,7 @@ Stand: 30.09.2026 · Branch: `feature/weclapp-employee-sync` · Grundlage: [API-
 | AP | Status |
 |---|---|
 | AP 0–5 | ✅ umgesetzt auf diesem Branch (M1 und M2 erreicht, Vorab-Tags folgen nach dem Merge nach `main`) |
-| AP 6 | ⏳ wartet auf den Test-Tenant (K1) |
+| AP 6 | 🟡 vorbereitet: Integrationstests in zwei Stufen ([integrationstests.md](integrationstests.md)), der Lauf wartet auf den Tenant (K1) |
 | AP 7 | 🟡 README mit Nutzung, Verhaltensgarantien und Tests fertig. Offen: Einrichtungsdoku (braucht P9), PyPI-Setup (K2), Release |
 
 Abweichungen vom ursprünglichen Plan:
@@ -183,7 +183,7 @@ unittests/
 ├── conftest.py                 # Client mit MockTransport bzw. FakeWeclapp
 ├── fixtures/                   # Beispiel-Responses mit synthetischen Daten
 ├── test_http.py, test_query.py, test_models.py, test_resources.py, test_testing.py
-└── integration/                # Marker "integration", läuft nur mit gesetzten WECLAPP_*-Variablen
+└── integration/                # Marker "integration" bzw. "integration_write", nur mit WECLAPP_*-Variablen
 ```
 
 ### 4.3 Nutzung im Sync-Repo (Beispiel)
@@ -454,12 +454,16 @@ Voraussetzung ist der Zugang zum Test-Tenant (K1). Dort wird eingerichtet:
 - ein Custom Attribute „Personalnummer“ (Typ `STRING`, Entität `user`, Key z. B.
   `personalnummer`)
 
-Welche Art von Tenant es wird, ist noch offen (K1). Davon hängt ab, was die Tests dort dürfen:
+Welche Art von Tenant es wird, ist noch offen (K1). Die Integrationstests sind deshalb in zwei Stufen aufgeteilt
+und funktionieren für beide Varianten (Anleitung: [integrationstests.md](integrationstests.md)):
 
-| Tenant | Integrationstests |
-|---|---|
-| eigener Test-Tenant | alle Prüfpunkte, inklusive Anlegen, Ändern und Aufräumen von Testdaten |
-| nur der Produktiv-Tenant | lesende Tests und Dry-Runs. Echte Schreibtests nur nach Absprache, mit wenigen, klar als Test markierten Datensätzen. Denn User lassen sich nur per `softDelete` entfernen, und automatische Mails (P2) sind noch ungeklärt |
+| Stufe | Marker | Inhalt | Test-Tenant | Produktiv-Tenant |
+|---|---|---|---|---|
+| 1 | `integration` | nur Lesezugriffe und Dry-Runs | ✅ | ✅ |
+| 2 | `integration_write` | legt markierte Testdatensätze an, ändert sie und räumt auf, nur mit `WECLAPP_ALLOW_WRITES=1` | ✅ | nur nach Absprache: verbraucht Mitarbeiternummern, User bleiben nach `softDelete` als Rest, eventuell gehen Mails raus (P2) |
+
+Mit dem Produktiv-Tenant allein bleiben P2, P3 und die `username`-Vergabe (P4) offen, bis ein abgestimmter
+Schreibtest läuft. Die übrigen Prüfpunkte deckt Stufe 1 ab.
 
 Prüfpunkte (die ⚠-Punkte aus der Analyse):
 
@@ -477,14 +481,16 @@ Prüfpunkte (die ⚠-Punkte aus der Analyse):
 | P10 | Format echter Fehlerantworten (400, 403, 404, 409) | Fehler gezielt provozieren | Fehler-Mapping, Fake |
 | P11 | Kann ein User mehrere Personalakten haben? (Der Fake nimmt an: nein) | zweiten `POST /employee` für denselben User | Fake, Doku für das Sync-Repo |
 
-- Integrationstests liegen in `unittests/integration/` (Marker `integration`). Sie laufen nur,
-  wenn `WECLAPP_BASE_URL` und `WECLAPP_API_TOKEN` gesetzt sind, also nicht in der CI.
-- Sie legen nur synthetische Testdatensätze an und räumen danach auf:
-  `DELETE /employee/id/{id}` und `POST /user/id/{id}/softDelete`. Beides läuft über
+- Die Integrationstests liegen in `unittests/integration/`. Sie laufen nur, wenn
+  `WECLAPP_API_TOKEN` und `WECLAPP_BASE_URL` bzw. `WECLAPP_TENANT` gesetzt sind, also nicht in der CI.
+- Stufe 2 legt nur markierte Testdatensätze an (Nachname `ZZ-Test weclapp-client`) und räumt sie
+  danach auf: `DELETE /employee/id/{id}` und `POST /user/id/{id}/softDelete`. Beides läuft über
   Test-Helfer, nicht über die öffentliche API.
-- **Keine echten Daten ins Repo**, denn es ist öffentlich. Echte Responses dienen nur als
-  Strukturvorlage für Fixtures, alle Werte werden ersetzt (keine Namen, keine Tenant-Namen,
-  keine IDs).
+- Am Ende gibt pytest eine Zusammenfassung aus: Befunde je Prüfpunkt, noch manuell zu Prüfendes
+  (z. B. Mails, Anzeige in der Oberfläche) und den Stand des Aufräumens. Personenbezogene Daten
+  enthält sie nicht.
+- **Keine echten Daten ins Repo**, denn es ist öffentlich. Antworten aus dem Tenant werden
+  nicht als Fixtures übernommen, auch nicht anonymisiert. Die Fixtures bleiben synthetisch.
 - Die Ergebnisse werden in der Analyse nachgetragen und sind damit auch die Grundlage für das
   Sync-Repo. Der Fake wird an das echte Verhalten angeglichen.
 
