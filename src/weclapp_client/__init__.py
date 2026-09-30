@@ -2,12 +2,44 @@
 Typed Python client for the weclapp REST API v2, focused on the endpoints needed to synchronise employee master data.
 """
 
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _distribution_version
+from weclapp_client._version import __version__
+from weclapp_client.config import WeclappConfig
+from weclapp_client.exceptions import (
+    AmbiguousResultError,
+    AuthenticationError,
+    ConflictError,
+    CustomAttributeDefinitionError,
+    InvalidQueryError,
+    NotFoundError,
+    OptimisticLockError,
+    PermissionDeniedError,
+    RateLimitError,
+    ServerError,
+    ValidationIssue,
+    WeclappApiError,
+    WeclappConfigurationError,
+    WeclappConnectionError,
+    WeclappError,
+    WeclappValidationError,
+)
 
-try:
-    __version__ = _distribution_version("weclapp-client")
-except PackageNotFoundError:  # pragma: no cover - only happens when the package is used without being installed
-    __version__ = "0.0.0"
-
-__all__ = ["__version__"]
+__all__ = [
+    "AmbiguousResultError",
+    "AuthenticationError",
+    "ConflictError",
+    "CustomAttributeDefinitionError",
+    "InvalidQueryError",
+    "NotFoundError",
+    "OptimisticLockError",
+    "PermissionDeniedError",
+    "RateLimitError",
+    "ServerError",
+    "ValidationIssue",
+    "WeclappApiError",
+    "WeclappConfig",
+    "WeclappConfigurationError",
+    "WeclappConnectionError",
+    "WeclappError",
+    "WeclappValidationError",
+    "__version__",
+]
