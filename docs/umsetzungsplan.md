@@ -37,9 +37,9 @@ nachrüsten (siehe Abschnitt 10).
 
 ### 2.1 Einbindung
 
-- Das Repo ist öffentlich. Deshalb wird das Paket auf **PyPI** veröffentlicht, per Trusted
-  Publishing (der Workflow liegt im Template schon bereit). Das Sync-Repo bindet dann eine
-  Version ein:
+- Das Paket wird auf **PyPI** veröffentlicht (entschieden, K2), per Trusted Publishing. Der
+  Workflow liegt im Template schon bereit, und das Repo ist ohnehin öffentlich. Das Sync-Repo
+  bindet dann eine Version ein:
 
   ```toml
   # pyproject.toml im Sync-Repo
@@ -65,6 +65,9 @@ nachrüsten (siehe Abschnitt 10).
   Python 3.11.
 
 ### 2.2 Was das Sync-Repo vom Client bekommt
+
+Das Sync-Repo gibt es noch nicht. Die Tabelle ist deshalb ein Vorschlag. Abgestimmt wird sie,
+sobald das Sync-Repo angelegt ist, spätestens vor `v0.1.0` (K3).
 
 | Bedarf im Sync-Repo | Client-Funktion |
 |---|---|
@@ -105,7 +108,7 @@ nachrüsten (siehe Abschnitt 10).
 | Thema | Entscheidung | Begründung |
 |---|---|---|
 | API-Version | v2 | aktuelle Version, v1 läuft aus |
-| Python | ≥ 3.11, getestet mit 3.11–3.14 (CI-Matrix des Templates) | deshalb keine Syntax ab 3.12, also keine PEP-695-Generics und kein `type`-Statement |
+| Python | ≥ 3.11, getestet mit 3.11–3.14 (CI-Matrix des Templates). Neue Versionen kommen nach ihrem Release in die Matrix, als Nächstes 3.15 (voraussichtlich Oktober 2026) | Das Sync-Repo läuft mit der jeweils neuesten Version (K3), das deckt die Matrix ab. Die Untergrenze 3.11 kostet im Code kaum etwas: Es fällt nur die Syntax ab 3.12 weg, also PEP-695-Generics und das `type`-Statement |
 | HTTP | `httpx` mit synchronem Client | Timeouts und gzip eingebaut, Mocks über `httpx.MockTransport`. Ein Sync-Job braucht keine Parallelität, und weclapp rät ohnehin von Lastspitzen ab |
 | Modelle | `pydantic` v2 mit mypy-Plugin, **getrennte Lese- und Schreibmodelle** | Lesemodelle garantieren `id` und `version`. Schreibmodelle enthalten nur beschreibbare Felder, read-only-Felder lassen sich damit gar nicht erst senden. Das Sync-Repo braucht so unter `mypy --strict` keine `None`-Prüfungen für IDs |
 | Retry | eigene kleine Implementierung | nur wenige Zeilen, volle Kontrolle über die Idempotenz-Regeln (AP 1) |
@@ -433,6 +436,13 @@ Voraussetzung ist der Zugang zum Test-Tenant (K1). Dort wird eingerichtet:
 - ein Custom Attribute „Personalnummer“ (Typ `STRING`, Entität `user`, Key z. B.
   `personalnummer`)
 
+Welche Art von Tenant es wird, ist noch offen (K1). Davon hängt ab, was die Tests dort dürfen:
+
+| Tenant | Integrationstests |
+|---|---|
+| eigener Test-Tenant | alle Prüfpunkte, inklusive Anlegen, Ändern und Aufräumen von Testdaten |
+| nur der Produktiv-Tenant | lesende Tests und Dry-Runs. Echte Schreibtests nur nach Absprache, mit wenigen, klar als Test markierten Datensätzen. Denn User lassen sich nur per `softDelete` entfernen, und automatische Mails (P2) sind noch ungeklärt |
+
 Prüfpunkte (die ⚠-Punkte aus der Analyse):
 
 | # | Prüfung | Vorgehen | Wirkt auf |
@@ -474,6 +484,7 @@ entspricht ihm.
 - Release-Prozess:
   - Workflow `python-publish.yml` aktivieren
   - Trusted Publishing auf PyPI und das GitHub-Environment `release` einrichten (K2)
+  - prüfen, ob die neueste Python-Version in der CI-Matrix ist
   - Tag `v0.1.0` setzen, GitHub-Release mit Release-Notes erstellen, das Paket landet auf PyPI
 - Das Sync-Repo stellt danach von der Git-Abhängigkeit auf die PyPI-Version um.
 
@@ -505,25 +516,29 @@ AP 0 --> AP 2 --+                 |                     |
 
 ---
 
-## 7. Offene Klärungen
+## 7. Klärungen
 
-**Für dieses Repo:**
+### 7.1 Klärungen für dieses Repo (Stand 30.09.2026)
 
-| # | Frage | Klärung durch | Blockiert |
-|---|---|---|---|
-| K1 | Zugang zum Test-Tenant | intern | AP 6 |
-| K2 | Veröffentlichung auf PyPI freigeben und Trusted Publishing samt GitHub-Environment `release` einrichten | Team / Repo-Admins | AP 7 (bis dahin genügen Git-Tags) |
-| K3 | Schnittstelle (Abschnitt 2) mit dem Sync-Repo abstimmen: Fehlt etwas? Nutzt das Sync-Repo Python ≥ 3.11? | Sync-Repo | M1 |
+| # | Thema | Stand | Noch zu tun | Blockiert |
+|---|---|---|---|---|
+| K1 | Test-Tenant | Der Zugang wird organisiert. Ob es ein eigener Test-Tenant oder der Produktiv-Tenant wird, ist noch unklar | Art des Tenants festlegen. Die Einschränkungen für den Produktiv-Tenant stehen in AP 6 | AP 6 |
+| K2 | Bereitstellung des Pakets | **entschieden: PyPI.** Bis dahin laufen Vorab-Versionen über Git-Tags | Jemand mit Admin-Rechten richtet Trusted Publishing auf PyPI und das GitHub-Environment `release` ein | AP 7 |
+| K3 | Sync-Repo | **geklärt:** Das Sync-Repo wird neu angelegt und läuft mit der neuesten Python-Version. Die Untergrenze 3.11 bleibt, neue Versionen kommen in die CI-Matrix | Schnittstelle (Abschnitt 2.2) abstimmen, sobald das Sync-Repo startet, spätestens vor `v0.1.0` | nichts |
 
-**An das Sync-Repo übergeben** (aus der Analyse, der Client unterstützt jedes Ergebnis):
+### 7.2 Übergabe an das Sync-Repo
+
+Diese Punkte stammen aus der Analyse. Sie betreffen die Sync-Logik oder den Betrieb, **nicht
+den Client**, denn der Client unterstützt jedes mögliche Ergebnis. Sie stehen nur hier, damit
+sie beim Start des Sync-Repos nicht verloren gehen.
 
 | # | Frage | Hinweis |
 |---|---|---|
-| S1 | Kosten User mit `NOT_ACTIVE` und ohne Lizenz etwas? | vor dem Go-live klären |
+| S1 | Kosten User mit `NOT_ACTIVE` und ohne Lizenz etwas? | Vor dem Go-live klären. Kostet jedes Konto etwas, ist das Vorgehen „ein User pro Mitarbeiter“ zu überdenken |
 | S2 | Haben alle Mitarbeiter eine E-Mail-Adresse? Wenn nicht: Regel für Platzhalter festlegen | `email` ist beim Anlegen eines Users Pflicht |
-| S3 | Verschickt `POST /user` automatisch Mails? | wird in AP 6 mit P2 geprüft |
+| S3 | Verschickt `POST /user` automatisch Mails? | Das API-Verhalten prüft der Client in AP 6 (P2), die Konsequenz zieht das Sync-Repo |
 | S4 | Gibt es in weclapp schon User oder Mitarbeiter, die beim Erstabgleich zugeordnet werden müssen? | betrifft den ersten Produktivlauf |
-| S5 | Lässt sich der Nummernkreis für Mitarbeiter manuell befüllen? (weclapp-Support) | bis dahin trägt das Custom Attribute die Personalnummer |
+| S5 | Lässt sich der Nummernkreis für Mitarbeiter manuell befüllen? (weclapp-Support) | Einzige Stelle, die den Client berühren könnte: Wird `employeeNumber` per API beschreibbar, bekommt `EmployeeCreate` das Feld. Bis dahin trägt das Custom Attribute die Personalnummer |
 | S6 | Betrieb des Sync-Jobs: Zeitplan, Hosting, Secrets | – |
 
 ---
@@ -541,6 +556,7 @@ AP 0 --> AP 2 --+                 |                     |
 | Geburtsdaten vor 1970 scheitern unter Windows | Umrechnung per `timedelta`, eigener Testfall |
 | weclapp ändert die API | tolerante Lesemodelle, nur partielle Updates. Später optional ein automatischer Abgleich mit der aktuellen Spec |
 | Echte Daten gelangen ins öffentliche Repo | nur synthetische Fixtures. Tenant-URL und Token nur über Umgebungsvariablen |
+| Es steht nur der Produktiv-Tenant zur Verfügung (K1) | dort nur lesende Tests und Dry-Runs. Schreibtests nur nach Absprache (AP 6) |
 | Personenbezogene Daten in Logs oder Fehlermeldungen | Logging-Regel, `SecretStr` für den Token, Test mit `caplog` |
 
 ---
