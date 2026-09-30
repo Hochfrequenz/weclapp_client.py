@@ -20,6 +20,7 @@ Stand: 30.09.2026 · Grundlage: offizielle OpenAPI-Specs
 | A2 | Feldumfang (Phase 1) | **Name, Geburtsdatum, Mitarbeiternummer.** Weitere Felder ggf. später. |
 | A3 | Neue Mitarbeiter | Werden in weclapp **angelegt**. Sie arbeiten **nicht selbst** mit weclapp, sondern werden dort nur verwaltet. **Klärungsbedarf, siehe Abschnitt 3.** |
 | A4 | Test-Tenant | Kommt noch, Zugriff wird organisiert. |
+| A5 | Aufteilung | Die Sync-Logik liegt in einem **eigenen Sync-Repo**. Dieses Repo liefert nur den API-Client als Paket, das dort als Abhängigkeit eingebunden wird. |
 
 ---
 
@@ -148,6 +149,9 @@ Bei allen `GET`-Listen nutzen wir `pageSize` bis 1000. Beim Anlegen und Ändern 
 
 ## 5. Sync-Ablauf pro Mitarbeiter (Phase 1)
 
+> Diesen Ablauf setzt das Sync-Repo um (A5). Hier ist er ein Vorschlag und beschreibt,
+> welche Operationen der Client dafür bereitstellen muss.
+
 ```text
 Eingabe: personalnummer, vorname, nachname, geburtsdatum, email
 
@@ -255,7 +259,7 @@ Attributes gibt es nur für den Entitätstyp `user`.
   `CustomAttributeDefinition` mit den Feldern aus Abschnitt 6. Read-only-Felder werden
   gelesen, aber nie gesendet. Unbekannte Felder werden toleriert, damit spätere
   API-Erweiterungen den Client nicht brechen.
-- **Nicht im Client, sondern in der Sync-Logik darüber:** Abgleich, Diff und die Regeln aus
+- **Nicht im Client, sondern im Sync-Repo (A5):** Abgleich, Diff und die Regeln aus
   Abschnitt 5.
 
 ---
