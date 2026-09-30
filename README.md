@@ -102,6 +102,54 @@ All exceptions derive from `WeclappError`. Errors returned by weclapp derive fro
 | `InvalidQueryError`        | unknown property in a filter, sort or selection | programming error           |
 | `AmbiguousResultError`     | `find_one()` matched several entities           | data problem                |
 
+## Testing without a weclapp tenant
+
+`weclapp_client.testing.FakeWeclapp` is an in-memory fake of the endpoints above. It assigns ids, versions, usernames
+and employee numbers, evaluates filters, sorting and paging, merges custom attributes in partial updates, detects stale
+versions (`OptimisticLockError`), validates required, read-only and unknown properties and supports dry runs.
+
+```python
+from datetime import date
+
+import httpx
+
+from weclapp_client.testing import FakeWeclapp
+
+
+def test_employee_is_created() -> None:
+    fake = FakeWeclapp()
+    definition = fake.add_custom_attribute_definition(attribute_key="personalnummer")
+    fake.add_user(email="max@example.com", last_name="Mustermann", custom_attributes={definition.id: "00007"})
+
+    with fake.client() as client:
+        run_sync(client, records)  # the code under test
+
+    assert [user.last_name for user in fake.users] == ["Mustermann", "Musterfrau"]
+    assert fake.employees[-1].birth_date == date(1985, 4, 12)
+
+
+def test_second_run_changes_nothing() -> None:
+    fake = FakeWeclapp()
+    ...
+    fake.clear_requests()
+    with fake.client() as client:
+        run_sync(client, records)
+    assert fake.write_requests == []
+
+
+def test_timeout_while_creating_an_employee() -> None:
+    fake = FakeWeclapp()
+    fake.fail_next(exception=httpx.ReadTimeout("timeout"), method="POST", path="employee")
+    ...
+```
+
+- `add_user()`, `add_employee()` and `add_custom_attribute_definition()` arrange test data without validation, so
+  inconsistent states (e.g. duplicate personnel numbers) can be tested as well.
+- `users`, `employees`, `requests` and `write_requests` show the state and the requests received.
+- `fail_next()` lets the next matching request fail with a status code or an exception.
+- Some rules of the fake are assumptions until they are verified against a real tenant: e-mail addresses are unique
+  (case-insensitive) and a user has at most one employee.
+
 ## Development
 
 This project uses [uv](https://docs.astral.sh/uv/) to manage the Python interpreter, the virtual environment and the

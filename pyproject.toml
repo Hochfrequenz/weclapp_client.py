@@ -58,6 +58,7 @@ select = ["E", "W", "F", "I", "UP", "B", "N", "PL", "RUF"]
 ignore = [
     "PLR0913", # too-many-arguments
     "PLR0917", # too-many-positional-arguments
+    "PLR0911", # too-many-return-statements
     "PLR0912", # too-many-branches
     "PLR0915", # too-many-statements
     "PLR2004", # magic-value-comparison
