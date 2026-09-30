@@ -9,6 +9,22 @@ Stand: 30.09.2026 · Branch: `feature/weclapp-employee-sync` · Grundlage: [API-
 > Der Plan deckt **Phase 1** ab: alles, was das Sync-Repo braucht, um Vorname, Nachname,
 > Geburtsdatum und Personalnummer (= Mitarbeiternummer) nach weclapp zu schreiben.
 
+**Stand der Umsetzung (30.09.2026):**
+
+| AP | Status |
+|---|---|
+| AP 0–5 | ✅ umgesetzt auf diesem Branch (M1 und M2 erreicht, Vorab-Tags folgen nach dem Merge nach `main`) |
+| AP 6 | ⏳ wartet auf den Test-Tenant (K1) |
+| AP 7 | 🟡 README mit Nutzung, Verhaltensgarantien und Tests fertig. Offen: Einrichtungsdoku (braucht P9), PyPI-Setup (K2), Release |
+
+Abweichungen vom ursprünglichen Plan:
+
+- Die Version liest das Paket über `importlib.metadata`, eine generierte Versionsdatei gibt es nicht.
+- Datumsfelder werden beim Lesen auf die nächste Mitternacht gerundet (siehe AP 2). Damit ist das Risiko aus P5
+  weitgehend entschärft, P5 bleibt trotzdem ein Prüfpunkt.
+- `get_by_key()` prüft den Typ des Custom Attributes nur, wenn `expected_type` übergeben wird.
+- `Employee` enthält zusätzlich `employment_status` (nur lesend), als Vorbereitung für das Offboarding.
+
 ---
 
 ## 1. Ziel und Abgrenzung
@@ -336,7 +352,9 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
     `datetime.fromtimestamp()`. **Geburtsdaten vor 1970 ergeben negative Timestamps**, und die
     kann `fromtimestamp()` unter Windows nicht verarbeiten.
   - Die Zeitzonen-Konvention für reine Datumsfelder wie `birth_date` steht an genau einer
-    Stelle: vorläufig Mitternacht UTC, endgültig nach Prüfpunkt P5 in AP 6.
+    Stelle. Geschrieben wird Mitternacht UTC. Beim Lesen wird auf die nächste Mitternacht
+    gerundet, damit auch Werte richtig gelesen werden, die weclapp als Mitternacht deutscher
+    Zeit speichert (22:00 bzw. 23:00 UTC am Vortag). Prüfpunkt P5 bestätigt das.
 - **Tests:**
   - Parsen von Beispiel-JSON, abgeleitet aus der Spec
   - Create-Modelle ohne Pflichtfelder schlagen fehl
@@ -457,6 +475,7 @@ Prüfpunkte (die ⚠-Punkte aus der Analyse):
 | P8 | `sort=id` und `pageSize=1000` bei `/user` und `/employee` | `GET` | Paging |
 | P9 | minimale Rechte des API-Users | Rolle schrittweise einschränken | Einrichtungsdoku |
 | P10 | Format echter Fehlerantworten (400, 403, 404, 409) | Fehler gezielt provozieren | Fehler-Mapping, Fake |
+| P11 | Kann ein User mehrere Personalakten haben? (Der Fake nimmt an: nein) | zweiten `POST /employee` für denselben User | Fake, Doku für das Sync-Repo |
 
 - Integrationstests liegen in `unittests/integration/` (Marker `integration`). Sie laufen nur,
   wenn `WECLAPP_BASE_URL` und `WECLAPP_API_TOKEN` gesetzt sind, also nicht in der CI.
@@ -565,7 +584,7 @@ sie beim Start des Sync-Repos nicht verloren gehen.
 
 - AP 0–7 abgeschlossen, CI grün, Coverage ≥ 80 % (Ziel: ≥ 90 %).
 - `mypy --strict` ohne Ausnahmen für `src` und `unittests`.
-- Prüfpunkte P1–P10 erledigt, die Ergebnisse in der Analyse nachgetragen, der Fake
+- Prüfpunkte P1–P11 erledigt, die Ergebnisse in der Analyse nachgetragen, der Fake
   angeglichen.
 - Öffentliche API und Verhaltensgarantien sind im README dokumentiert.
 - `v0.1.0` liegt auf PyPI. Das Sync-Repo kann das Paket installieren und seine Logik gegen den
