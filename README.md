@@ -12,22 +12,20 @@ It deliberately covers only the endpoints needed to synchronise employee master 
 The synchronisation logic itself (matching, diffing, reporting) lives in a separate repository that uses this package
 as a dependency.
 
-> **Status:** under development, see the [implementation plan](docs/umsetzungsplan.md) (German).
-> The [API analysis](docs/weclapp_api_analyse.md) (German) explains which endpoints are relevant and why.
+> **Status:** early `0.x` version. The client is fully tested against mocks and an in-memory fake, but not yet
+> against a real weclapp tenant ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)), so the API may
+> still change. See the [implementation plan](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/umsetzungsplan.md)
+> and the [API analysis](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/weclapp_api_analyse.md)
+> (both German) and the [open issues](https://github.com/Hochfrequenz/weclapp_client.py/issues).
 
 ## Installation
-
-The package is not released yet. Once it is, install it from PyPI:
 
 ```bash
 uv add weclapp-client
 ```
 
-Until then, a pre-release can be installed from a git tag:
-
-```bash
-uv add "weclapp-client @ git+https://github.com/Hochfrequenz/weclapp_client.py@v0.1.0a1"
-```
+or `pip install weclapp-client`. As long as the version is `0.x`, minor versions may contain breaking changes, so pin
+the minor version (e.g. `weclapp-client>=0.1,<0.2`).
 
 ## Usage
 
@@ -173,17 +171,19 @@ uv run codespell --ignore-words=domain-specific-terms.txt src README.md
 Integration tests against a real weclapp tenant live in `unittests/integration/` and are skipped unless
 `WECLAPP_API_TOKEN` and `WECLAPP_BASE_URL` (or `WECLAPP_TENANT`) are set. Tests marked `integration` only read and
 send dry runs; tests marked `integration_write` create test records and additionally need `WECLAPP_ALLOW_WRITES=1`.
-See [docs/integrationstests.md](docs/integrationstests.md) (German).
+See [docs/integrationstests.md](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/integrationstests.md)
+(German).
 
 ## Releasing
 
-Versions are derived from git tags (`v0.1.0`, `v0.1.0a1`, ...) via hatch-vcs.
-Publishing to PyPI uses trusted publishing via [`.github/workflows/python-publish.yml`](.github/workflows/python-publish.yml),
-which still needs to be activated:
+Versions are derived from git tags (`v0.1.0`, `v0.1.1`, ...) via hatch-vcs. Publishing a GitHub release with a `v*` tag
+runs [`python-publish.yml`](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/.github/workflows/python-publish.yml),
+which tests, builds and uploads the package to PyPI via trusted publishing.
 
-1. Uncomment the workflow.
-2. Create a GitHub environment named `release`. If its deployment branches are restricted, add a rule of type *Tag*
+One-time setup:
+
+1. Create a GitHub environment named `release`. If its deployment branches are restricted, add a rule of type *Tag*
    matching `v*`, because a release deploys from the tag, not from a branch.
-3. Register the trusted publisher on PyPI (project `weclapp-client`, owner `Hochfrequenz`,
-   repository `weclapp_client.py`, workflow `python-publish.yml`, environment `release`).
-4. Create a GitHub release with a `v*` tag.
+2. Register the trusted publisher on PyPI (project `weclapp-client`, owner `Hochfrequenz`,
+   repository `weclapp_client.py`, workflow `python-publish.yml`, environment `release`). For the first release,
+   this is a "pending publisher", because the project does not exist on PyPI yet.

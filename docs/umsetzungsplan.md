@@ -13,9 +13,9 @@ Stand: 30.09.2026 · Branch: `feature/weclapp-employee-sync` · Grundlage: [API-
 
 | AP | Status |
 |---|---|
-| AP 0–5 | ✅ umgesetzt auf diesem Branch (M1 und M2 erreicht, Vorab-Tags folgen nach dem Merge nach `main`) |
-| AP 6 | 🟡 vorbereitet: Integrationstests in zwei Stufen ([integrationstests.md](integrationstests.md)), der Lauf wartet auf den Tenant (K1) |
-| AP 7 | 🟡 README mit Nutzung, Verhaltensgarantien und Tests fertig. Offen: Einrichtungsdoku (braucht P9), PyPI-Setup (K2), Release |
+| AP 0–5 | ✅ umgesetzt (PR #3), M1 und M2 erreicht |
+| AP 6 | 🟡 vorbereitet: Integrationstests in zwei Stufen ([integrationstests.md](integrationstests.md)), der Lauf wartet auf den Tenant (K1: [#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8), Lauf: [#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)) |
+| AP 7 | 🟡 README und Publish-Workflow fertig. Offen: PyPI-Setup und erstes Release ([#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10)), Einrichtungsdoku ([#11](https://github.com/Hochfrequenz/weclapp_client.py/issues/11)) |
 
 Abweichungen vom ursprünglichen Plan:
 
@@ -24,6 +24,11 @@ Abweichungen vom ursprünglichen Plan:
   weitgehend entschärft, P5 bleibt trotzdem ein Prüfpunkt.
 - `get_by_key()` prüft den Typ des Custom Attributes nur, wenn `expected_type` übergeben wird.
 - `Employee` enthält zusätzlich `employment_status` (nur lesend), als Vorbereitung für das Offboarding.
+- **Erstes Release vor der Verifikation** (Entscheidung vom 07.10.2026): Das erste Release (Vorschlag `v0.1.0`,
+  siehe [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10)) erscheint mit dem Stand von AP 0–5
+  direkt auf PyPI, die Vorab-Tags `v0.1.0a1`/`v0.1.0a2` entfallen. Ergeben die Integrationstests
+  ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)) Änderungen, folgen Patch- oder Minor-Releases.
+- Offene Fragen und To-dos stehen als Issues im Repo ([#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8)–[#19](https://github.com/Hochfrequenz/weclapp_client.py/issues/19)), siehe Abschnitt 7.
 
 ---
 
@@ -66,7 +71,7 @@ nachrüsten (siehe Abschnitt 10).
   Tag. Zugangsdaten braucht es dafür nicht, weil das Repo öffentlich ist:
 
   ```toml
-  dependencies = ["weclapp-client @ git+https://github.com/Hochfrequenz/weclapp_client.py@v0.1.0a1"]
+  dependencies = ["weclapp-client @ git+https://github.com/Hochfrequenz/weclapp_client.py@v0.1.0"]
   ```
 
 - **Versionierung:** SemVer über Git-Tags (hatch-vcs). Solange die Version bei `0.x` steht,
@@ -83,7 +88,7 @@ nachrüsten (siehe Abschnitt 10).
 ### 2.2 Was das Sync-Repo vom Client bekommt
 
 Das Sync-Repo gibt es noch nicht. Die Tabelle ist deshalb ein Vorschlag. Abgestimmt wird sie,
-sobald das Sync-Repo angelegt ist, spätestens vor `v0.1.0` (K3).
+sobald das Sync-Repo angelegt ist (K3, [#12](https://github.com/Hochfrequenz/weclapp_client.py/issues/12)).
 
 | Bedarf im Sync-Repo | Client-Funktion |
 |---|---|
@@ -240,10 +245,10 @@ def test_new_employee_is_created() -> None:
 | 1 | HTTP-Transport, Konfiguration, Fehler | `_http.py`, `config.py`, `exceptions.py` | AP 0 | nein | M · 1–1,5 PT |
 | 2 | Modelle und Konvertierung | `models/`, `_converters.py` | AP 0 | nein | M · 1 PT |
 | 3 | Abfragen und generische Ressource | `query.py`, `resources/base.py` | AP 1, AP 2 | nein | M · 1 PT |
-| 4 | Konkrete Ressourcen, Client-Fassade, erste Vorab-Version | `resources/*`, `client.py`, Tag `v0.1.0a1` → **M1** | AP 3 | nein | S · 0,5–1 PT |
-| 5 | Test-Unterstützung `weclapp_client.testing` | `FakeWeclapp`, Tag `v0.1.0a2` → **M2** | AP 4 | nein | M · 1–1,5 PT |
+| 4 | Konkrete Ressourcen und Client-Fassade | `resources/*`, `client.py` → **M1** | AP 3 | nein | S · 0,5–1 PT |
+| 5 | Test-Unterstützung `weclapp_client.testing` | `FakeWeclapp` → **M2** | AP 4 | nein | M · 1–1,5 PT |
 | 6 | Verifikation mit dem Test-Tenant | Prüfpunkte erledigt, Integrationstests, Fake angeglichen → **M3** | AP 4 (für den Fake: AP 5) | **ja** | M · 1 PT plus Wartezeit |
-| 7 | Dokumentation und Release | README mit Verhaltensgarantien, `v0.1.0` auf PyPI → **M4** | AP 5, AP 6 | nein | S · 0,5–1 PT |
+| 7 | Dokumentation und Release | README mit Verhaltensgarantien, `v0.1.0` auf PyPI → **M4** | AP 5 | nein | S · 0,5–1 PT |
 
 Summe: ca. 6,5–8,5 PT, Wartezeiten nicht eingerechnet.
 
@@ -408,8 +413,7 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
   eigener `httpx.Client` übergeben.
 - **Tests:** Pfade und Parameter jeder Ressource, Smoke-Test der öffentlichen API (die
   Importe aus Abschnitt 2.2).
-- Vorab-Version `v0.1.0a1` taggen, damit das Sync-Repo mit der Integration beginnen kann
-  (Einbindung per Git-Tag, siehe 2.1).
+- ~~Vorab-Version `v0.1.0a1` taggen~~: entfällt, das erste Release erscheint direkt auf PyPI.
 
 **Meilenstein M1:** Der Client-Kern ist fertig, gegen Mocks getestet und für das Sync-Repo
 einbindbar.
@@ -442,7 +446,7 @@ das ohnehin eine Abhängigkeit ist.
     Timeout“
 - **Tests:** Die Ressourcen-Tests des Clients laufen zusätzlich gegen den Fake. Der Fake
   bekommt außerdem eigene Tests.
-- Vorab-Version `v0.1.0a2` taggen.
+- ~~Vorab-Version `v0.1.0a2` taggen~~: entfällt, siehe AP 4.
 
 **Meilenstein M2:** Das Sync-Repo kann seine Logik ohne Tenant testen.
 
@@ -507,11 +511,11 @@ entspricht ihm.
 - `docs/einrichtung_weclapp.md` auf Deutsch: API-User und minimale Rechte (P9), Token,
   Custom Attribute anlegen. Das Sync-Repo verweist darauf.
 - Release-Prozess:
-  - Workflow `python-publish.yml` aktivieren
-  - Trusted Publishing auf PyPI und das GitHub-Environment `release` einrichten (K2)
-  - prüfen, ob die neueste Python-Version in der CI-Matrix ist
+  - Workflow `python-publish.yml` aktivieren (erledigt)
+  - Trusted Publishing auf PyPI und das GitHub-Environment `release` einrichten (K2, [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10))
+  - prüfen, ob die neueste Python-Version in der CI-Matrix ist ([#13](https://github.com/Hochfrequenz/weclapp_client.py/issues/13))
   - Tag `v0.1.0` setzen, GitHub-Release mit Release-Notes erstellen, das Paket landet auf PyPI
-- Das Sync-Repo stellt danach von der Git-Abhängigkeit auf die PyPI-Version um.
+- Das Sync-Repo bindet danach die PyPI-Version ein.
 
 **Meilenstein M4:** `v0.1.0` liegt auf PyPI.
 
@@ -529,10 +533,10 @@ AP 0 --> AP 2 --+                 |                     |
 
 | Meilenstein | Inhalt | Nutzen für das Sync-Repo |
 |---|---|---|
-| M1 | Client-Kern (AP 0–4), Vorab-Version `v0.1.0a1` | kann mit der Integration beginnen |
-| M2 | Fake (AP 5), Vorab-Version `v0.1.0a2` | kann seine Logik ohne Tenant testen |
+| M1 | Client-Kern (AP 0–4) | kann mit der Integration beginnen |
+| M2 | Fake (AP 5) | kann seine Logik ohne Tenant testen |
 | M3 | Verifikation am Test-Tenant (AP 6) | kann sich auf dokumentiertes API-Verhalten verlassen |
-| M4 | Release `v0.1.0` auf PyPI (AP 7) | hat eine stabile Version für den Produktivbetrieb |
+| M4 | Release `v0.1.0` auf PyPI (AP 7), vor M3 | kann das Paket per PyPI einbinden. Für den Produktivbetrieb zusätzlich M3 abwarten |
 
 - Bis M2 ist kein Test-Tenant nötig.
 - AP 6 kann parallel zu AP 5 beginnen, sobald der Zugang da ist.
@@ -543,13 +547,13 @@ AP 0 --> AP 2 --+                 |                     |
 
 ## 7. Klärungen
 
-### 7.1 Klärungen für dieses Repo (Stand 30.09.2026)
+### 7.1 Klärungen für dieses Repo (Stand 07.10.2026)
 
-| # | Thema | Stand | Noch zu tun | Blockiert |
-|---|---|---|---|---|
-| K1 | Test-Tenant | Der Zugang wird organisiert. Ob es ein eigener Test-Tenant oder der Produktiv-Tenant wird, ist noch unklar | Art des Tenants festlegen. Die Einschränkungen für den Produktiv-Tenant stehen in AP 6 | AP 6 |
-| K2 | Bereitstellung des Pakets | **entschieden: PyPI.** Bis dahin laufen Vorab-Versionen über Git-Tags | Jemand mit Admin-Rechten richtet Trusted Publishing auf PyPI und das GitHub-Environment `release` ein | AP 7 |
-| K3 | Sync-Repo | **geklärt:** Das Sync-Repo wird neu angelegt und läuft mit der neuesten Python-Version. Die Untergrenze 3.11 bleibt, neue Versionen kommen in die CI-Matrix | Schnittstelle (Abschnitt 2.2) abstimmen, sobald das Sync-Repo startet, spätestens vor `v0.1.0` | nichts |
+| # | Thema | Stand | Noch zu tun | Blockiert | Issue |
+|---|---|---|---|---|---|
+| K1 | Test-Tenant | Der Zugang wird organisiert. Ob es ein eigener Test-Tenant oder der Produktiv-Tenant wird, ist noch unklar | Art des Tenants festlegen. Die Einschränkungen für den Produktiv-Tenant stehen in AP 6 | AP 6 | [#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8) |
+| K2 | Bereitstellung des Pakets | **entschieden: PyPI.** Das erste Release `v0.1.0` erscheint mit dem aktuellen Stand, der Publish-Workflow ist aktiviert | Jemand mit Admin-Rechten richtet Trusted Publishing auf PyPI und das GitHub-Environment `release` ein | AP 7 | [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10) |
+| K3 | Sync-Repo | **geklärt:** Das Sync-Repo wird neu angelegt und läuft mit der neuesten Python-Version. Die Untergrenze 3.11 bleibt, neue Versionen kommen in die CI-Matrix | Schnittstelle (Abschnitt 2.2) abstimmen, sobald das Sync-Repo startet | nichts | [#12](https://github.com/Hochfrequenz/weclapp_client.py/issues/12) |
 
 ### 7.2 Übergabe an das Sync-Repo
 
@@ -557,14 +561,14 @@ Diese Punkte stammen aus der Analyse. Sie betreffen die Sync-Logik oder den Betr
 den Client**, denn der Client unterstützt jedes mögliche Ergebnis. Sie stehen nur hier, damit
 sie beim Start des Sync-Repos nicht verloren gehen.
 
-| # | Frage | Hinweis |
-|---|---|---|
-| S1 | Kosten User mit `NOT_ACTIVE` und ohne Lizenz etwas? | Vor dem Go-live klären. Kostet jedes Konto etwas, ist das Vorgehen „ein User pro Mitarbeiter“ zu überdenken |
-| S2 | Haben alle Mitarbeiter eine E-Mail-Adresse? Wenn nicht: Regel für Platzhalter festlegen | `email` ist beim Anlegen eines Users Pflicht |
-| S3 | Verschickt `POST /user` automatisch Mails? | Das API-Verhalten prüft der Client in AP 6 (P2), die Konsequenz zieht das Sync-Repo |
-| S4 | Gibt es in weclapp schon User oder Mitarbeiter, die beim Erstabgleich zugeordnet werden müssen? | betrifft den ersten Produktivlauf |
-| S5 | Lässt sich der Nummernkreis für Mitarbeiter manuell befüllen? (weclapp-Support) | Einzige Stelle, die den Client berühren könnte: Wird `employeeNumber` per API beschreibbar, bekommt `EmployeeCreate` das Feld. Bis dahin trägt das Custom Attribute die Personalnummer |
-| S6 | Betrieb des Sync-Jobs: Zeitplan, Hosting, Secrets | – |
+| # | Frage | Hinweis | Issue |
+|---|---|---|---|
+| S1 | Kosten User mit `NOT_ACTIVE` und ohne Lizenz etwas? | Vor dem Go-live klären. Kostet jedes Konto etwas, ist das Vorgehen „ein User pro Mitarbeiter“ zu überdenken | [#14](https://github.com/Hochfrequenz/weclapp_client.py/issues/14) |
+| S2 | Haben alle Mitarbeiter eine E-Mail-Adresse? Wenn nicht: Regel für Platzhalter festlegen | `email` ist beim Anlegen eines Users Pflicht | [#15](https://github.com/Hochfrequenz/weclapp_client.py/issues/15) |
+| S3 | Verschickt `POST /user` automatisch Mails? | Das API-Verhalten prüft der Client in AP 6 (P2), die Konsequenz zieht das Sync-Repo | [#16](https://github.com/Hochfrequenz/weclapp_client.py/issues/16) |
+| S4 | Gibt es in weclapp schon User oder Mitarbeiter, die beim Erstabgleich zugeordnet werden müssen? | betrifft den ersten Produktivlauf | [#17](https://github.com/Hochfrequenz/weclapp_client.py/issues/17) |
+| S5 | Lässt sich der Nummernkreis für Mitarbeiter manuell befüllen? (weclapp-Support) | Einzige Stelle, die den Client berühren könnte: Wird `employeeNumber` per API beschreibbar, bekommt `EmployeeCreate` das Feld. Bis dahin trägt das Custom Attribute die Personalnummer | [#18](https://github.com/Hochfrequenz/weclapp_client.py/issues/18) |
+| S6 | Betrieb des Sync-Jobs: Zeitplan, Hosting, Secrets | – | [#19](https://github.com/Hochfrequenz/weclapp_client.py/issues/19) |
 
 ---
 
