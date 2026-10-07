@@ -20,12 +20,15 @@ as a dependency.
 
 ## Installation
 
+The first release is a pre-release (`0.1.0a1`), because the client has not been verified against a real weclapp tenant
+yet. pip and uv only install pre-releases if the version specifier names one:
+
 ```bash
-uv add weclapp-client
+uv add "weclapp-client>=0.1.0a1,<0.2"
 ```
 
-or `pip install weclapp-client`. As long as the version is `0.x`, minor versions may contain breaking changes, so pin
-the minor version (e.g. `weclapp-client>=0.1,<0.2`).
+or `pip install "weclapp-client>=0.1.0a1,<0.2"`. Once `0.1.0` is released, the same specifier picks it up.
+As long as the version is `0.x`, minor versions may contain breaking changes, so keep the upper bound.
 
 ## Usage
 

@@ -24,10 +24,10 @@ Abweichungen vom ursprünglichen Plan:
   weitgehend entschärft, P5 bleibt trotzdem ein Prüfpunkt.
 - `get_by_key()` prüft den Typ des Custom Attributes nur, wenn `expected_type` übergeben wird.
 - `Employee` enthält zusätzlich `employment_status` (nur lesend), als Vorbereitung für das Offboarding.
-- **Erstes Release vor der Verifikation** (Entscheidung vom 07.10.2026): Das erste Release (Vorschlag `v0.1.0`,
-  siehe [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10)) erscheint mit dem Stand von AP 0–5
-  direkt auf PyPI, die Vorab-Tags `v0.1.0a1`/`v0.1.0a2` entfallen. Ergeben die Integrationstests
-  ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)) Änderungen, folgen Patch- oder Minor-Releases.
+- **Vorabversion auf PyPI vor der Verifikation** (Entscheidung vom 07.10.2026): Mit dem Stand von AP 0–5 erscheint
+  `v0.1.0a1` auf PyPI statt nur als Git-Tag ([#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10)). `v0.1.0` bleibt dem Stand nach den
+  Integrationstests ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)) vorbehalten. Die zweite Vorabversion `v0.1.0a2` entfällt, weil `a1` den Fake
+  schon enthält.
 - Offene Fragen und To-dos stehen als Issues im Repo ([#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8)–[#19](https://github.com/Hochfrequenz/weclapp_client.py/issues/19)), siehe Abschnitt 7.
 
 ---
@@ -67,12 +67,15 @@ nachrüsten (siehe Abschnitt 10).
   dependencies = ["weclapp-client>=0.1,<0.2"]
   ```
 
-- Bis PyPI eingerichtet ist, und für Vorab-Versionen, dient eine Git-Abhängigkeit auf ein
-  Tag. Zugangsdaten braucht es dafür nicht, weil das Repo öffentlich ist:
+- Vorabversionen liegen ebenfalls auf PyPI. pip und uv installieren sie nur, wenn die Versionsangabe selbst eine
+  Vorabversion nennt. Dieselbe Angabe greift später automatisch die finale Version:
 
   ```toml
-  dependencies = ["weclapp-client @ git+https://github.com/Hochfrequenz/weclapp_client.py@v0.1.0"]
+  dependencies = ["weclapp-client>=0.1.0a1,<0.2"]
   ```
+
+- Alternativ geht eine Git-Abhängigkeit auf ein Tag, ohne Zugangsdaten, weil das Repo öffentlich ist:
+  `weclapp-client @ git+https://github.com/Hochfrequenz/weclapp_client.py@v0.1.0a1`.
 
 - **Versionierung:** SemVer über Git-Tags (hatch-vcs). Solange die Version bei `0.x` steht,
   darf auch eine Minor-Version Breaking Changes enthalten. Das Sync-Repo pinnt deshalb auf
@@ -248,7 +251,7 @@ def test_new_employee_is_created() -> None:
 | 4 | Konkrete Ressourcen und Client-Fassade | `resources/*`, `client.py` → **M1** | AP 3 | nein | S · 0,5–1 PT |
 | 5 | Test-Unterstützung `weclapp_client.testing` | `FakeWeclapp` → **M2** | AP 4 | nein | M · 1–1,5 PT |
 | 6 | Verifikation mit dem Test-Tenant | Prüfpunkte erledigt, Integrationstests, Fake angeglichen → **M3** | AP 4 (für den Fake: AP 5) | **ja** | M · 1 PT plus Wartezeit |
-| 7 | Dokumentation und Release | README mit Verhaltensgarantien, `v0.1.0` auf PyPI → **M4** | AP 5 | nein | S · 0,5–1 PT |
+| 7 | Dokumentation und Release | README mit Verhaltensgarantien, `v0.1.0a1` und später `v0.1.0` auf PyPI → **M4** | AP 5, für `v0.1.0` AP 6 | nein | S · 0,5–1 PT |
 
 Summe: ca. 6,5–8,5 PT, Wartezeiten nicht eingerechnet.
 
@@ -413,7 +416,7 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
   eigener `httpx.Client` übergeben.
 - **Tests:** Pfade und Parameter jeder Ressource, Smoke-Test der öffentlichen API (die
   Importe aus Abschnitt 2.2).
-- ~~Vorab-Version `v0.1.0a1` taggen~~: entfällt, das erste Release erscheint direkt auf PyPI.
+- Vorabversion `v0.1.0a1` veröffentlichen, auf PyPI statt nur als Git-Tag ([#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10)), zusammen mit AP 5.
 
 **Meilenstein M1:** Der Client-Kern ist fertig, gegen Mocks getestet und für das Sync-Repo
 einbindbar.
@@ -446,7 +449,7 @@ das ohnehin eine Abhängigkeit ist.
     Timeout“
 - **Tests:** Die Ressourcen-Tests des Clients laufen zusätzlich gegen den Fake. Der Fake
   bekommt außerdem eigene Tests.
-- ~~Vorab-Version `v0.1.0a2` taggen~~: entfällt, siehe AP 4.
+- ~~Vorabversion `v0.1.0a2` taggen~~: entfällt, `v0.1.0a1` enthält den Fake bereits.
 
 **Meilenstein M2:** Das Sync-Repo kann seine Logik ohne Tenant testen.
 
@@ -514,7 +517,8 @@ entspricht ihm.
   - Workflow `python-publish.yml` aktivieren (erledigt)
   - Trusted Publishing auf PyPI und das GitHub-Environment `release` einrichten (K2, [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10))
   - prüfen, ob die neueste Python-Version in der CI-Matrix ist ([#13](https://github.com/Hochfrequenz/weclapp_client.py/issues/13))
-  - Tag `v0.1.0` setzen, GitHub-Release mit Release-Notes erstellen, das Paket landet auf PyPI
+  - Vorabversion `v0.1.0a1` mit dem Stand von AP 0–5 veröffentlichen (GitHub-Release als „pre-release“)
+  - nach den Integrationstests: Tag `v0.1.0` setzen, GitHub-Release erstellen, das Paket landet auf PyPI
 - Das Sync-Repo bindet danach die PyPI-Version ein.
 
 **Meilenstein M4:** `v0.1.0` liegt auf PyPI.
@@ -536,7 +540,7 @@ AP 0 --> AP 2 --+                 |                     |
 | M1 | Client-Kern (AP 0–4) | kann mit der Integration beginnen |
 | M2 | Fake (AP 5) | kann seine Logik ohne Tenant testen |
 | M3 | Verifikation am Test-Tenant (AP 6) | kann sich auf dokumentiertes API-Verhalten verlassen |
-| M4 | Release `v0.1.0` auf PyPI (AP 7), vor M3 | kann das Paket per PyPI einbinden. Für den Produktivbetrieb zusätzlich M3 abwarten |
+| M4 | Release `v0.1.0` auf PyPI (AP 7), vorab schon `v0.1.0a1` | hat mit `a1` sofort eine installierbare Version, mit `v0.1.0` eine verifizierte für den Produktivbetrieb |
 
 - Bis M2 ist kein Test-Tenant nötig.
 - AP 6 kann parallel zu AP 5 beginnen, sobald der Zugang da ist.
@@ -552,7 +556,7 @@ AP 0 --> AP 2 --+                 |                     |
 | # | Thema | Stand | Noch zu tun | Blockiert | Issue |
 |---|---|---|---|---|---|
 | K1 | Test-Tenant | Der Zugang wird organisiert. Ob es ein eigener Test-Tenant oder der Produktiv-Tenant wird, ist noch unklar | Art des Tenants festlegen. Die Einschränkungen für den Produktiv-Tenant stehen in AP 6 | AP 6 | [#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8) |
-| K2 | Bereitstellung des Pakets | **entschieden: PyPI.** Das erste Release `v0.1.0` erscheint mit dem aktuellen Stand, der Publish-Workflow ist aktiviert | Jemand mit Admin-Rechten richtet Trusted Publishing auf PyPI und das GitHub-Environment `release` ein | AP 7 | [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10) |
+| K2 | Bereitstellung des Pakets | **entschieden: PyPI.** Zuerst erscheint die Vorabversion `v0.1.0a1` mit dem aktuellen Stand, `v0.1.0` nach den Integrationstests. Der Publish-Workflow ist aktiviert | Jemand mit Admin-Rechten richtet Trusted Publishing auf PyPI und das GitHub-Environment `release` ein | AP 7 | [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10) |
 | K3 | Sync-Repo | **geklärt:** Das Sync-Repo wird neu angelegt und läuft mit der neuesten Python-Version. Die Untergrenze 3.11 bleibt, neue Versionen kommen in die CI-Matrix | Schnittstelle (Abschnitt 2.2) abstimmen, sobald das Sync-Repo startet | nichts | [#12](https://github.com/Hochfrequenz/weclapp_client.py/issues/12) |
 
 ### 7.2 Übergabe an das Sync-Repo
