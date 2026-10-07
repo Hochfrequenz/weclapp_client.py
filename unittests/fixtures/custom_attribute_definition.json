@@ -1,0 +1,11 @@
+{
+  "id": "9001",
+  "version": "0",
+  "attributeKey": "personalnummer",
+  "attributeType": "STRING",
+  "label": "Personalnummer",
+  "active": true,
+  "mandatory": false,
+  "attributeEntityType": "user",
+  "entities": ["user"]
+}

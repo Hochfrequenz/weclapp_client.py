@@ -1,0 +1,20 @@
+{
+  "id": "4711",
+  "version": "3",
+  "createdDate": 1700000000000,
+  "lastModifiedDate": 1700000500000,
+  "username": "erika.musterfrau@example.com",
+  "email": "erika.musterfrau@example.com",
+  "firstName": "Erika",
+  "lastName": "Musterfrau",
+  "status": "NOT_ACTIVE",
+  "canEditDashboard": false,
+  "superUser": false,
+  "licenses": [],
+  "userRoles": [],
+  "phoneNumber": "+49 000 0000000",
+  "customAttributes": [
+    { "attributeDefinitionId": "9001", "stringValue": "00042" },
+    { "attributeDefinitionId": "9002", "selectedValueId": "5" }
+  ]
+}
