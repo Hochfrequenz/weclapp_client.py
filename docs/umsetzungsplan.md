@@ -132,7 +132,7 @@ sobald das Sync-Repo angelegt ist (K3, [#12](https://github.com/Hochfrequenz/wec
 | Thema | Entscheidung | Begründung |
 |---|---|---|
 | API-Version | v2 | aktuelle Version, v1 läuft aus |
-| Python | ≥ 3.11, getestet mit 3.11–3.14 (CI-Matrix des Templates). Neue Versionen kommen nach ihrem Release in die Matrix, als Nächstes 3.15 (voraussichtlich Oktober 2026) | Das Sync-Repo läuft mit der jeweils neuesten Version (K3), das deckt die Matrix ab. Die Untergrenze 3.11 kostet im Code kaum etwas: Es fällt nur die Syntax ab 3.12 weg, also PEP-695-Generics und das `type`-Statement |
+| Python | ≥ 3.11, getestet mit 3.11–3.15 (CI-Matrix des Templates). Neue Versionen kommen nach ihrem Release in die Matrix | Das Sync-Repo läuft mit der jeweils neuesten Version (K3), das deckt die Matrix ab. Die Untergrenze 3.11 kostet im Code kaum etwas: Es fällt nur die Syntax ab 3.12 weg, also PEP-695-Generics und das `type`-Statement |
 | HTTP | `httpx` mit synchronem Client | Timeouts und gzip eingebaut, Mocks über `httpx.MockTransport`. Ein Sync-Job braucht keine Parallelität, und weclapp rät ohnehin von Lastspitzen ab |
 | Modelle | `pydantic` v2 mit mypy-Plugin, **getrennte Lese- und Schreibmodelle** | Lesemodelle garantieren `id` und `version`. Schreibmodelle enthalten nur beschreibbare Felder, read-only-Felder lassen sich damit gar nicht erst senden. Das Sync-Repo braucht so unter `mypy --strict` keine `None`-Prüfungen für IDs |
 | Retry | eigene kleine Implementierung | nur wenige Zeilen, volle Kontrolle über die Idempotenz-Regeln (AP 1) |
@@ -274,7 +274,7 @@ Summe: ca. 6,5–8,5 PT, Wartezeiten nicht eingerechnet.
 - README: den Template-Text durch eine kurze Projektbeschreibung ersetzen (Ausbau in AP 7).
 - `uv lock` neu erzeugen.
 
-**Fertig, wenn** alle CI-Checks grün sind: Unittests 3.11–3.14, Coverage ≥ 80 %, ruff, mypy
+**Fertig, wenn** alle CI-Checks grün sind: Unittests 3.11–3.15, Coverage ≥ 80 %, ruff, mypy
 strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
 
 ### AP 1 – HTTP-Transport, Konfiguration, Fehler
@@ -581,7 +581,7 @@ sie beim Start des Sync-Repos nicht verloren gehen.
 | Risiko | Gegenmaßnahme |
 |---|---|
 | Breaking Changes im Client brechen das Sync-Repo | SemVer, klar definierte öffentliche API, Release-Notes. Das Sync-Repo pinnt auf eine Minor-Version |
-| Versionskonflikte der Abhängigkeiten im Sync-Repo | nur zwei Laufzeit-Abhängigkeiten, Untergrenzen statt Pins, CI-Matrix 3.11–3.14 |
+| Versionskonflikte der Abhängigkeiten im Sync-Repo | nur zwei Laufzeit-Abhängigkeiten, Untergrenzen statt Pins, CI-Matrix 3.11–3.15 |
 | Der Fake weicht vom echten API-Verhalten ab, die Tests im Sync-Repo wiegen dann in falscher Sicherheit | Fake nach AP 6 angleichen. Dieselben Szenarien laufen gegen den Fake und als Integrationstest gegen den Tenant |
 | weclapp ignoriert unbekannte Filter stillschweigend | Feldnamen vor dem Request prüfen, `find_one` mit Mehrdeutigkeits-Check |
 | Doppelte Anlage nach einem Timeout bei `POST` | kein Retry bei unklarem Ausgang. Dokumentierte Garantie: Das Sync-Repo sucht vor dem Anlegen |
