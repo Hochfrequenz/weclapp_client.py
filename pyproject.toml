@@ -29,7 +29,7 @@ Homepage = "https://github.com/Hochfrequenz/weclapp_client.py"
 
 [dependency-groups]
 tests = ["pytest==9.1.1"]
-linting = [{ include-group = "tests" }, "ruff==0.17.1"]
+linting = [{ include-group = "tests" }, "ruff==0.17.2"]
 type_check = [{ include-group = "tests" }, "mypy==2.4.0"]
 spell_check = ["codespell==2.4.3"]
 coverage = [{ include-group = "tests" }, "coverage==7.16.2"]
