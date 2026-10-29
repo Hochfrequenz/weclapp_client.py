@@ -6,7 +6,7 @@ does not necessarily run all checks of a real request. The write tests (tier 2) 
 """
 
 import itertools
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from typing import Any
 
@@ -14,7 +14,7 @@ import pytest
 
 from weclapp_client import Filter, NotFoundError, WeclappApiError, WeclappClient, WeclappValidationError
 from weclapp_client._http import entity_path
-from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, UserCreate, UserStatus
+from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, User, UserCreate, UserStatus
 
 from .conftest import TEST_LAST_NAME, Cleanup, IntegrationReport
 
@@ -148,21 +148,33 @@ def _username_convention(username: str | None, email: str | None) -> str:
         return "gleich der E-Mail-Adresse in Kleinschreibung"
     if username.lower() == email.lower():
         return "gleich der E-Mail-Adresse in anderer Schreibweise"
-    return "anders gebildet"
+    if "@" not in username:
+        return "ohne @ gebildet"
+    return "eine andere E-Mail-Adresse"
 
 
 def test_existing_usernames_and_emails(client: WeclappClient, report: IntegrationReport) -> None:
-    users = client.users.list(properties=["username", "email"])
+    users = client.users.list(properties=["username", "email", "status"])
     conventions = Counter(_username_convention(user.username, user.email) for user in users)
     summary = ", ".join(f"{name}: {count}" for name, count in conventions.most_common())
     report.finding("P4", f"username bestehender User ({len(users)}): {summary}")
 
-    emails = Counter(user.email.lower() for user in users if user.email)
-    duplicates = sum(1 for count in emails.values() if count > 1)
-    if duplicates:
-        report.finding("P4", f"ACHTUNG: {duplicates} E-Mail-Adressen kommen (ohne Groß-/Kleinschreibung) mehrfach vor")
-    else:
+    by_email: defaultdict[str, list[User]] = defaultdict(list)
+    for user in users:
+        if user.email:
+            by_email[user.email.lower()].append(user)
+    groups = [group for group in by_email.values() if len(group) > 1]
+    if not groups:
         report.finding("P4", "keine E-Mail-Adresse kommt (ohne Groß-/Kleinschreibung) mehrfach vor")
+        return
+    same_spelling = sum(1 for group in groups if len({user.email for user in group}) < len(group))
+    statuses = Counter(str(user.status or "ohne Status") for group in groups for user in group)
+    status_summary = ", ".join(f"{name}: {count}" for name, count in statuses.most_common())
+    report.finding(
+        "P4",
+        f"{len(groups)} E-Mail-Adressen kommen mehrfach vor ({same_spelling} davon in gleicher Schreibweise); "
+        f"Status der betroffenen User: {status_summary}",
+    )
 
 
 def test_existing_employee_records(client: WeclappClient, report: IntegrationReport) -> None:

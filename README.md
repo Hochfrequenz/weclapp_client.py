@@ -12,9 +12,9 @@ It deliberately covers only the endpoints needed to synchronise employee master 
 The synchronisation logic itself (matching, diffing, reporting) lives in a separate repository that uses this package
 as a dependency.
 
-> **Status:** early `0.x` version. The client is fully tested against mocks and an in-memory fake, but not yet
-> against a real weclapp tenant ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)), so the API may
-> still change. See the [implementation plan](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/umsetzungsplan.md)
+> **Status:** early `0.x` version. The client is fully tested against mocks and an in-memory fake and has been
+> checked against a real weclapp tenant with reads and dry runs. A test that creates records is still pending
+> ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)), so the API may still change. See the [implementation plan](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/umsetzungsplan.md)
 > and the [API analysis](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/weclapp_api_analyse.md)
 > (both German) and the [open issues](https://github.com/Hochfrequenz/weclapp_client.py/issues).
 
@@ -64,6 +64,9 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - `iterate()`/`list()` page through all entities; `properties=[...]` loads only the given properties
   (`id` and `version` are always included).
 - `find_one()` returns `None` if nothing matches and raises `AmbiguousResultError` if more than one entity matches.
+  weclapp does not require unique e-mail addresses, so a lookup by e-mail can match several users.
+- `get_by_key()` needs the key of the custom attribute. weclapp may generate it (a random string) when the attribute
+  is created in the user interface; in that case, load the definition by its id with `get()`.
 - `create()` and `update()` accept `dry_run=True`: weclapp validates the data without storing it, and the method
   returns `None` (weclapp does not assign ids in dry runs).
 - Read models (`User`, `Employee`, ...) guarantee `id` and `version`. Write models (`UserCreate`, `UserUpdate`, ...)
@@ -150,8 +153,8 @@ def test_timeout_while_creating_an_employee() -> None:
   inconsistent states (e.g. duplicate personnel numbers) can be tested as well.
 - `users`, `employees`, `requests` and `write_requests` show the state and the requests received.
 - `fail_next()` lets the next matching request fail with a status code or an exception.
-- Some rules of the fake are assumptions until they are verified against a real tenant: e-mail addresses are unique
-  (case-insensitive) and a user has at most one employee.
+- Like weclapp, the fake accepts several users with the same e-mail address, so check for an existing user yourself
+  before creating one. A user has at most one employee.
 
 ## Development
 

@@ -24,11 +24,12 @@ import pytest
 from weclapp_client import WeclappClient, WeclappConfig, WeclappError
 from weclapp_client._http import entity_path
 from weclapp_client.config import ENV_API_TOKEN, ENV_BASE_URL, ENV_TENANT
-from weclapp_client.exceptions import CustomAttributeDefinitionError
+from weclapp_client.exceptions import CustomAttributeDefinitionError, NotFoundError
 from weclapp_client.models import CustomAttributeDefinition, CustomAttributeType
 
 ENV_ALLOW_WRITES = "WECLAPP_ALLOW_WRITES"
 ENV_PERSONNEL_NUMBER_KEY = "WECLAPP_IT_PERSONNEL_NUMBER_KEY"
+ENV_PERSONNEL_NUMBER_ATTRIBUTE_ID = "WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID"
 ENV_EMAIL_TEMPLATE = "WECLAPP_IT_EMAIL_TEMPLATE"
 DEFAULT_PERSONNEL_NUMBER_KEY = "personalnummer"
 DEFAULT_EMAIL_TEMPLATE = "weclapp-client-it+{id}@example.com"
@@ -125,6 +126,18 @@ def new_email_fixture(run_id: str) -> Callable[[], str]:
 
 @pytest.fixture(name="personnel_number_definition", scope="session")
 def personnel_number_definition_fixture(client: WeclappClient) -> CustomAttributeDefinition:
+    # weclapp may generate the key of an attribute created in the UI, so the id is the more reliable reference
+    attribute_id = os.environ.get(ENV_PERSONNEL_NUMBER_ATTRIBUTE_ID, "").strip()
+    if attribute_id:
+        try:
+            definition = client.custom_attribute_definitions.get(attribute_id)
+        except NotFoundError:
+            pytest.skip(f"There is no custom attribute with the id {attribute_id}")
+        if definition.attribute_type != CustomAttributeType.STRING:
+            pytest.skip(
+                f"The custom attribute {attribute_id} has the type {definition.attribute_type}, expected STRING"
+            )
+        return definition
     key = os.environ.get(ENV_PERSONNEL_NUMBER_KEY, "").strip() or DEFAULT_PERSONNEL_NUMBER_KEY
     try:
         return client.custom_attribute_definitions.get_by_key(key, expected_type=CustomAttributeType.STRING)

@@ -22,9 +22,11 @@ Warum Stufe 2 im Produktiv-Tenant heikel ist:
 
 ## Vorbereitung im Tenant
 
-1. **Technischen API-User anlegen** und dessen API-Token erzeugen (Mein weclapp → API).
-2. **Custom Attribute für die Personalnummer anlegen:** Typ `STRING`, Entität `user`, Key z. B.
-   `personalnummer`. Ohne das Attribut werden die Tests zu P6 und die ganze Stufe 2 übersprungen.
+1. **Technischen API-User anlegen** und dessen API-Token erzeugen (Meine Einstellungen → API-Token). Bei einem
+   falschen Token antwortet weclapp auf jeden Request mit `401 no identity available`.
+2. **Custom Attribute für die Personalnummer anlegen:** Typ `STRING`, Entität `user`. Ohne das Attribut werden die
+   Tests zu P6 und die ganze Stufe 2 übersprungen. Den Key vergibt weclapp unter Umständen selbst (eine zufällige
+   Zeichenfolge). Gib den Tests dann die ID des Attributs über `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID`.
 3. Für P2 ein **Test-Postfach** bereithalten, das Mails an eine Adressvorlage wie
    `weclapp-it+{id}@eure-domain.de` empfängt. Ohne eigene Vorlage verwenden die Tests
    `weclapp-client-it+{id}@example.com`: Das ist unkritisch, zeigt aber nicht, ob Mails verschickt werden.
@@ -36,6 +38,7 @@ Warum Stufe 2 im Produktiv-Tenant heikel ist:
 | `WECLAPP_API_TOKEN` | ja | Token des technischen API-Users |
 | `WECLAPP_BASE_URL` oder `WECLAPP_TENANT` | ja | z. B. `https://<tenant>.weclapp.com/webapp/api/v2/` bzw. nur `<tenant>` |
 | `WECLAPP_ALLOW_WRITES` | nur für Stufe 2 | `1` erlaubt das Anlegen von Testdatensätzen |
+| `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID` | nein | ID des Custom Attributes für die Personalnummer, hat Vorrang vor dem Key |
 | `WECLAPP_IT_PERSONNEL_NUMBER_KEY` | nein | Key des Custom Attributes, Standard `personalnummer` |
 | `WECLAPP_IT_EMAIL_TEMPLATE` | nein | Vorlage für Test-E-Mail-Adressen mit dem Platzhalter `{id}` |
 
