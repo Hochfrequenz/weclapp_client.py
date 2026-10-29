@@ -4,19 +4,24 @@ Die Integrationstests prüfen die Punkte P1–P11 aus dem [Umsetzungsplan](umset
 der echten weclapp-API, auf das sich Client und `FakeWeclapp` verlassen. Sie liegen in `unittests/integration/` und
 werden ohne Zugangsdaten automatisch übersprungen, auch in der CI.
 
-## Zwei Stufen
+## Zwei Stufen und das Aufräumen
 
-| Stufe | Marker | Was passiert | Geeignet für |
+| Schritt | Marker | Was passiert | Geeignet für |
 |---|---|---|---|
-| 1 | `integration` | nur Lesezugriffe und Dry-Runs (`dryRun=true`), keine Änderungen | Test-Tenant **und** Produktiv-Tenant |
-| 2 | `integration_write` | legt eigene Testdatensätze an, ändert sie und räumt sie am Ende auf | Test-Tenant, im Produktiv-Tenant nur nach Absprache |
+| Stufe 1 | `integration` | nur Lesezugriffe und Dry-Runs (`dryRun=true`), keine Änderungen | Test-Tenant **und** Produktiv-Tenant |
+| Stufe 2 | `integration_write` | legt genau einen Test-User mit einer Personalakte an, alles Weitere nur lesend oder als Dry-Run. Die Datensätze bleiben für die manuellen Prüfungen stehen | Test-Tenant, im Produktiv-Tenant nur nach Absprache |
+| Aufräumen | `integration_cleanup` | löscht die Personalakten der Test-User und dann die User selbst | nach den manuellen Prüfungen |
 
-Stufe 2 läuft nur, wenn zusätzlich `WECLAPP_ALLOW_WRITES=1` gesetzt ist.
+Stufe 2 läuft nur, wenn zusätzlich `WECLAPP_ALLOW_WRITES=1` gesetzt ist, das Aufräumen nur mit
+`WECLAPP_ALLOW_WRITES=1` und `WECLAPP_IT_CLEANUP=1`. Testdatensätze erkennt das Aufräumen am Nachnamen
+`ZZ-Test weclapp-client`. Findet es mehr als fünf solche User, entfernt es nichts.
 
 Warum Stufe 2 im Produktiv-Tenant heikel ist:
 
 - Jede angelegte Personalakte verbraucht eine Mitarbeiternummer aus dem Nummernkreis.
-- User lassen sich in API v2 nur per `softDelete` entfernen, Reste bleiben im System (Lizenzfrage S1).
+- API v2 kann User nur per `softDelete` entfernen, dann bleibt ein Rest im System. Das Aufräumen versucht deshalb
+  zuerst das `DELETE` der API v1, erst als Dry-Run, dann echt, und nimmt nur bei einer Ablehnung `softDelete`.
+- Ein User mit `ACTIVE` kostet eventuell eine Lizenz, solange er existiert (S1).
 - Beim Anlegen eines Users gehen eventuell Mails raus (P2).
 - Integrationen oder Webhooks, die an eurem weclapp hängen, könnten auf neue User reagieren.
 
@@ -37,7 +42,9 @@ Warum Stufe 2 im Produktiv-Tenant heikel ist:
 |---|---|---|
 | `WECLAPP_API_TOKEN` | ja | Token des technischen API-Users |
 | `WECLAPP_BASE_URL` oder `WECLAPP_TENANT` | ja | z. B. `https://<tenant>.weclapp.com/webapp/api/v2/` bzw. nur `<tenant>` |
-| `WECLAPP_ALLOW_WRITES` | nur für Stufe 2 | `1` erlaubt das Anlegen von Testdatensätzen |
+| `WECLAPP_ALLOW_WRITES` | für Stufe 2 und das Aufräumen | `1` erlaubt das Anlegen und Entfernen von Testdatensätzen |
+| `WECLAPP_IT_CLEANUP` | für das Aufräumen | `1` erlaubt das Entfernen der Testdatensätze |
+| `WECLAPP_IT_USER_STATUS` | nein | Status des Test-Users in Stufe 2, `ACTIVE` oder `NOT_ACTIVE` (Standard) |
 | `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID` | nein | ID des Custom Attributes für die Personalnummer, hat Vorrang vor dem Key |
 | `WECLAPP_IT_PERSONNEL_NUMBER_KEY` | nein | Key des Custom Attributes, Standard `personalnummer` |
 | `WECLAPP_IT_EMAIL_TEMPLATE` | nein | Vorlage für Test-E-Mail-Adressen mit dem Platzhalter `{id}` |
@@ -53,10 +60,16 @@ Stufe 1 (auch im Produktiv-Tenant unbedenklich), PowerShell:
 $env:WECLAPP_TENANT = "<tenant>"; $env:WECLAPP_API_TOKEN = "<token>"; uv run pytest unittests/integration -m integration -rs
 ```
 
-Stufe 1 und 2 (Test-Tenant oder nach Absprache), PowerShell:
+Stufe 2 (Test-Tenant oder nach Absprache), PowerShell:
 
 ```powershell
-$env:WECLAPP_TENANT = "<tenant>"; $env:WECLAPP_API_TOKEN = "<token>"; $env:WECLAPP_ALLOW_WRITES = "1"; uv run pytest unittests/integration -rs
+$env:WECLAPP_TENANT = "<tenant>"; $env:WECLAPP_API_TOKEN = "<token>"; $env:WECLAPP_ALLOW_WRITES = "1"; uv run pytest unittests/integration -m integration_write -rs
+```
+
+Aufräumen nach den manuellen Prüfungen, PowerShell:
+
+```powershell
+$env:WECLAPP_TENANT = "<tenant>"; $env:WECLAPP_API_TOKEN = "<token>"; $env:WECLAPP_ALLOW_WRITES = "1"; $env:WECLAPP_IT_CLEANUP = "1"; uv run pytest unittests/integration -m integration_cleanup -rs
 ```
 
 In einer POSIX-Shell (Git Bash, Linux, macOS):
@@ -73,8 +86,8 @@ Am Ende gibt pytest den Abschnitt **„weclapp: Ergebnisse der Prüfpunkte (AP 6
   Befunde mit `ACHTUNG` bedeuten, dass eine Annahme des Fakes nicht stimmt.
 - **Manuell zu prüfen:** was sich nicht automatisch feststellen lässt, z. B. ob eine Mail angekommen ist (P2) oder
   wie die Oberfläche das Geburtsdatum anzeigt (P5), jeweils mit den IDs der Testdatensätze.
-- **Aufräumen:** welche Testdatensätze entfernt wurden und welche nicht. Nicht entfernte Datensätze haben den
-  Nachnamen `ZZ-Test weclapp-client` und lassen sich darüber in weclapp finden.
+- **Aufräumen:** welche Testdatensätze Stufe 2 angelegt und behalten hat, und beim Aufräumen, wie sie entfernt
+  wurden. Testdatensätze haben den Nachnamen `ZZ-Test weclapp-client` und lassen sich darüber in weclapp finden.
 
 Die Proben in Stufe 1 halten ihr Ergebnis meist nur fest und schlagen nicht fehl, weil ein Dry-Run nicht zwingend alle
 Prüfungen eines echten Requests durchläuft. Stufe 2 prüft das echte Verhalten mit Assertions.
@@ -94,4 +107,5 @@ Prüfungen eines echten Requests durchläuft. Stufe 2 prüft das echte Verhalten
 2. Weicht weclapp von einer Annahme des Fakes ab (`ACHTUNG`), `FakeWeclapp` und dessen Tests anpassen.
 3. Weicht weclapp von einer Annahme des Clients ab, z. B. bei der Zeitzone (P5) oder bei den Pflichtfeldern (P1),
    Modelle bzw. Umrechnung anpassen.
-4. Nicht aufgeräumte Testdatensätze in weclapp entfernen.
+4. Nach den manuellen Prüfungen die Testdatensätze mit dem Aufräumen (`-m integration_cleanup`) entfernen. Bleibt
+   ein Rest per `softDelete`, steht das in der Zusammenfassung.

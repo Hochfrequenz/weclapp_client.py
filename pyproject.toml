@@ -79,6 +79,7 @@ testpaths = ["unittests"]
 markers = [
     "integration: reads and dry runs against a real weclapp tenant (safe for production), see docs/integrationstests.md",
     "integration_write: creates test records in a real weclapp tenant, additionally needs WECLAPP_ALLOW_WRITES=1",
+    "integration_cleanup: removes the test records again, additionally needs WECLAPP_ALLOW_WRITES=1 and WECLAPP_IT_CLEANUP=1",
 ]
 
 [build-system]

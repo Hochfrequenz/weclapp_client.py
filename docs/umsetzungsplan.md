@@ -467,7 +467,7 @@ beide Varianten (Anleitung: [integrationstests.md](integrationstests.md)):
 | Stufe | Marker | Inhalt | Test-Tenant | Produktiv-Tenant |
 |---|---|---|---|---|
 | 1 | `integration` | nur Lesezugriffe und Dry-Runs | ✅ | ✅ |
-| 2 | `integration_write` | legt markierte Testdatensätze an, ändert sie und räumt auf, nur mit `WECLAPP_ALLOW_WRITES=1` | ✅ | nur nach Absprache: verbraucht Mitarbeiternummern, User bleiben nach `softDelete` als Rest, eventuell gehen Mails raus (P2) |
+| 2 | `integration_write` | legt genau einen markierten Test-User mit Personalakte an, alles Weitere nur lesend oder als Dry-Run, nur mit `WECLAPP_ALLOW_WRITES=1`. Aufgeräumt wird danach in einem eigenen Schritt (`integration_cleanup`) | ✅ | nur nach Absprache: verbraucht eine Mitarbeiternummer, der User bleibt nach `softDelete` als Rest, falls weclapp das `DELETE` der API v1 ablehnt, eventuell gehen Mails raus (P2) |
 
 Mit dem Produktiv-Tenant allein bleiben P2, P3 und die `username`-Vergabe (P4) offen, bis ein abgestimmter
 Schreibtest läuft. Die übrigen Prüfpunkte deckt Stufe 1 ab. Stufe 1 ist am 29.10.2026 gelaufen, die Befunde
@@ -492,9 +492,10 @@ Prüfpunkte (die ⚠-Punkte aus der Analyse):
 
 - Die Integrationstests liegen in `unittests/integration/`. Sie laufen nur, wenn
   `WECLAPP_API_TOKEN` und `WECLAPP_BASE_URL` bzw. `WECLAPP_TENANT` gesetzt sind, also nicht in der CI.
-- Stufe 2 legt nur markierte Testdatensätze an (Nachname `ZZ-Test weclapp-client`) und räumt sie
-  danach auf: `DELETE /employee/id/{id}` und `POST /user/id/{id}/softDelete`. Beides läuft über
-  Test-Helfer, nicht über die öffentliche API.
+- Stufe 2 legt nur markierte Testdatensätze an (Nachname `ZZ-Test weclapp-client`) und lässt sie
+  für die manuellen Prüfungen stehen. Danach entfernt sie ein eigener Schritt: `DELETE /employee/id/{id}`,
+  dann `DELETE /user/id/{id}` der API v1, und nur wenn weclapp das ablehnt `POST /user/id/{id}/softDelete`.
+  Das läuft über Test-Helfer, nicht über die öffentliche API.
 - Am Ende gibt pytest eine Zusammenfassung aus: Befunde je Prüfpunkt, noch manuell zu Prüfendes
   (z. B. Mails, Anzeige in der Oberfläche) und den Stand des Aufräumens. Personenbezogene Daten
   enthält sie nicht.

@@ -1,11 +1,13 @@
 """
 Integration tests against a real weclapp tenant (implementation plan, AP 6). See docs/integrationstests.md.
 
-Two tiers:
+Two tiers and a cleanup:
 
 - ``integration``: only reads and dry runs, safe for a production tenant.
-- ``integration_write``: creates, changes and cleans up clearly marked test records; additionally needs
-  ``WECLAPP_ALLOW_WRITES=1``.
+- ``integration_write``: creates one clearly marked test user with one employee record and keeps them for the manual
+  checks; additionally needs ``WECLAPP_ALLOW_WRITES=1``.
+- ``integration_cleanup``: removes the test records afterwards; additionally needs ``WECLAPP_ALLOW_WRITES=1`` and
+  ``WECLAPP_IT_CLEANUP=1``.
 
 Without ``WECLAPP_API_TOKEN`` and ``WECLAPP_BASE_URL``/``WECLAPP_TENANT`` all tests are skipped (e.g. in CI).
 
@@ -28,6 +30,8 @@ from weclapp_client.exceptions import CustomAttributeDefinitionError, NotFoundEr
 from weclapp_client.models import CustomAttributeDefinition, CustomAttributeType
 
 ENV_ALLOW_WRITES = "WECLAPP_ALLOW_WRITES"
+ENV_CLEANUP = "WECLAPP_IT_CLEANUP"
+ENV_USER_STATUS = "WECLAPP_IT_USER_STATUS"
 ENV_PERSONNEL_NUMBER_KEY = "WECLAPP_IT_PERSONNEL_NUMBER_KEY"
 ENV_PERSONNEL_NUMBER_ATTRIBUTE_ID = "WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID"
 ENV_EMAIL_TEMPLATE = "WECLAPP_IT_EMAIL_TEMPLATE"
@@ -43,20 +47,24 @@ def _is_configured() -> bool:
     return has_token and has_target
 
 
-def _writes_allowed() -> bool:
-    return os.environ.get(ENV_ALLOW_WRITES, "").strip().lower() in {"1", "true", "yes"}
+def _is_set(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     not_configured = pytest.mark.skip(reason=f"{ENV_API_TOKEN} and {ENV_BASE_URL} or {ENV_TENANT} are not set")
     no_writes = pytest.mark.skip(reason=f"write tests need {ENV_ALLOW_WRITES}=1")
+    no_cleanup = pytest.mark.skip(reason=f"the cleanup needs {ENV_ALLOW_WRITES}=1 and {ENV_CLEANUP}=1")
     for item in items:
         is_read = item.get_closest_marker("integration") is not None
         is_write = item.get_closest_marker("integration_write") is not None
-        if (is_read or is_write) and not _is_configured():
+        is_cleanup = item.get_closest_marker("integration_cleanup") is not None
+        if (is_read or is_write or is_cleanup) and not _is_configured():
             item.add_marker(not_configured)
-        elif is_write and not _writes_allowed():
+        elif is_write and not _is_set(ENV_ALLOW_WRITES):
             item.add_marker(no_writes)
+        elif is_cleanup and not (_is_set(ENV_ALLOW_WRITES) and _is_set(ENV_CLEANUP)):
+            item.add_marker(no_cleanup)
 
 
 @dataclass
@@ -116,12 +124,15 @@ def run_id_fixture() -> str:
 
 @pytest.fixture(name="new_email", scope="session")
 def new_email_fixture(run_id: str) -> Callable[[], str]:
-    """Returns a function that creates a new, unique e-mail address for a test record."""
+    """
+    Returns a function that creates a new, unique e-mail address for a test record. The address contains upper case
+    letters, so the tests see whether weclapp keeps them (e.g. in the username).
+    """
     template = os.environ.get(ENV_EMAIL_TEMPLATE, "").strip() or DEFAULT_EMAIL_TEMPLATE
     if "{id}" not in template:
         raise ValueError(f"{ENV_EMAIL_TEMPLATE} must contain the placeholder {{id}}")
     counter = itertools.count(1)
-    return lambda: template.format(id=f"{run_id}-{next(counter)}")
+    return lambda: template.format(id=f"IT-{run_id}-{next(counter)}")
 
 
 @pytest.fixture(name="personnel_number_definition", scope="session")

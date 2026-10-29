@@ -1,37 +1,41 @@
 """
-Tier 2: creates, changes and cleans up clearly marked test records (``WECLAPP_ALLOW_WRITES=1``).
+Tier 2: creates one clearly marked test user with one employee record (``WECLAPP_ALLOW_WRITES=1``).
 
-In a production tenant, run these tests only after agreement: employees consume numbers of the employee number range,
-and users can only be removed via ``softDelete``, which leaves records behind.
+The run creates exactly these two records and changes nothing else; everything beyond that is checked with reads and
+dry runs. That keeps it acceptable for a production tenant: an employee consumes a number of the employee number
+range, and a user may leave a remnant in weclapp. The records are kept for the manual checks (mailbox, user
+interface); remove them afterwards with the cleanup (``test_cleanup.py``).
 """
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 
 import pytest
 
-from weclapp_client import Filter, OptimisticLockError, WeclappClient, WeclappValidationError
+from weclapp_client import Filter, WeclappClient
+from weclapp_client._converters import date_to_ms
 from weclapp_client._http import entity_path
 from weclapp_client.models import (
     CustomAttribute,
     CustomAttributeDefinition,
     Employee,
     EmployeeCreate,
-    EmployeeUpdate,
     User,
     UserCreate,
     UserStatus,
-    UserUpdate,
 )
 
-from .conftest import TEST_LAST_NAME, Cleanup, IntegrationReport
+from .conftest import ENV_USER_STATUS, TEST_LAST_NAME, IntegrationReport
 
 pytestmark = pytest.mark.integration_write
 
 _BIRTH_DATE = date(1950, 1, 1)
 """before 1970, so negative timestamps are covered as well"""
 _ENTRY_DATE = date(2020, 4, 1)
+_DAY_MS = 86_400_000
+_HOUR_MS = 3_600_000
 
 
 @dataclass(frozen=True)
@@ -40,18 +44,19 @@ class _TestRecords:
     employee: Employee
     email: str
     personnel_number: str
+    status: UserStatus
     definition: CustomAttributeDefinition
 
 
 @pytest.fixture(name="records", scope="module")
 def records_fixture(
     client: WeclappClient,
-    cleanup: Cleanup,
     new_email: Callable[[], str],
     run_id: str,
     personnel_number_definition: CustomAttributeDefinition,
     report: IntegrationReport,
 ) -> _TestRecords:
+    status = UserStatus(os.environ.get(ENV_USER_STATUS, "").strip() or UserStatus.NOT_ACTIVE)
     email = new_email()
     personnel_number = f"IT-{run_id}"
     user = client.users.create(
@@ -59,46 +64,54 @@ def records_fixture(
             email=email,
             first_name=f"IT-{run_id}",
             last_name=TEST_LAST_NAME,
-            status=UserStatus.NOT_ACTIVE,
+            status=status,
             custom_attributes=[CustomAttribute.of_string(personnel_number_definition.id, personnel_number)],
         )
     )
-    cleanup.add_user(user.id)
+    report.cleanup.append(f"User {user.id} angelegt und behalten")
     employee = client.employees.create(EmployeeCreate(user_id=user.id, birth_date=_BIRTH_DATE, entry_date=_ENTRY_DATE))
-    cleanup.add_employee(employee.id)
-    report.manual(f"P2: im Test-Postfach prüfen, ob für {email} eine Mail angekommen ist")
+    report.cleanup.append(f"Personalakte {employee.id} angelegt und behalten, aufräumen mit -m integration_cleanup")
+    report.manual(f"P2: im Postfach von {email} prüfen, ob eine Mail von weclapp angekommen ist")
     report.manual(f"P3: Personalakte {employee.id} in der Oberfläche öffnen und prüfen, ob sie nutzbar ist")
-    report.manual(f"P5: in der Oberfläche prüfen, dass Personalakte {employee.id} den 01.01.1950 zeigt")
-    return _TestRecords(user, employee, email, personnel_number, personnel_number_definition)
+    report.manual(
+        f"P5: in der Oberfläche prüfen, dass Personalakte {employee.id} als Geburtsdatum den 01.01.1950 "
+        "und als Eintrittsdatum den 01.04.2020 zeigt"
+    )
+    return _TestRecords(user, employee, email, personnel_number, status, personnel_number_definition)
 
 
-def test_user_is_created_as_not_active(records: _TestRecords, report: IntegrationReport) -> None:
-    assert records.user.status is UserStatus.NOT_ACTIVE
+def test_user_is_created(records: _TestRecords, report: IntegrationReport) -> None:
+    assert records.user.status == records.status
     assert records.user.custom_attribute(records.definition.id) == CustomAttribute.of_string(
         records.definition.id, records.personnel_number
     )
     username = records.user.username or ""
     if username == records.email:
-        convention = "entspricht der E-Mail-Adresse"
+        convention = "gleich der E-Mail-Adresse, Groß-/Kleinschreibung bleibt erhalten"
     elif username == records.email.lower():
-        convention = "entspricht der E-Mail-Adresse in Kleinschreibung"
+        convention = "gleich der E-Mail-Adresse in Kleinschreibung"
     else:
-        convention = "wird anders gebildet (Beispiel ansehen)"
-    report.finding("P2", "User mit status NOT_ACTIVE angelegt")
-    report.finding("P4", f"username {convention}")
+        convention = "anders gebildet (Beispiel ansehen)"
+    report.finding("P2", f"User mit status {records.status} angelegt")
+    report.finding("P4", f"username eines per API angelegten Users: {convention}")
 
 
-def test_employee_is_created_with_birth_and_entry_date(
+def test_employee_is_created_with_dates(
     client: WeclappClient, records: _TestRecords, report: IntegrationReport
 ) -> None:
     employee = client.employees.get(records.employee.id)
     assert employee.user_id == records.user.id
     assert employee.birth_date == _BIRTH_DATE
     assert employee.entry_date == _ENTRY_DATE
+    assert employee.employee_number
     raw = client._transport.request_json("GET", entity_path("employee", employee.id))
-    offset_hours = (raw["birthDate"] % 86_400_000) / 3_600_000
-    report.finding("P3", f"Personalakte für NOT_ACTIVE-User angelegt, employeeNumber {employee.employee_number!r}")
-    report.finding("P5", f"vom Client geschriebenes Geburtsdatum kommt zurück mit Uhrzeit {offset_hours:g}:00 UTC")
+    times = {name: (raw[name] % _DAY_MS) / _HOUR_MS for name in ("birthDate", "entryDate")}
+    report.finding("P3", f"Personalakte für einen User mit status {records.status} angelegt, employeeNumber vergeben")
+    report.finding(
+        "P5",
+        "vom Client geschriebene Daten kommen zurück mit Uhrzeit "
+        + ", ".join(f"{name} {hours:g}:00 UTC" for name, hours in times.items()),
+    )
 
 
 def test_find_user_by_personnel_number(client: WeclappClient, records: _TestRecords, report: IntegrationReport) -> None:
@@ -109,66 +122,15 @@ def test_find_user_by_personnel_number(client: WeclappClient, records: _TestReco
     report.finding("P6", "neu angelegter User wird über die Personalnummer gefunden")
 
 
-def test_partial_update_keeps_other_properties(
+def test_dry_run_partial_employee_update(
     client: WeclappClient, records: _TestRecords, report: IntegrationReport
 ) -> None:
-    current = client.users.get(records.user.id)
-    updated = client.users.update(current, UserUpdate(first_name=f"{current.first_name}-geändert"))
-    assert updated.version != current.version
-    assert updated.last_name == TEST_LAST_NAME
-    assert updated.email == current.email
-    assert updated.custom_attribute(records.definition.id) == current.custom_attribute(records.definition.id)
-    report.finding("P7", "partielles PUT /user ändert nur die gesendeten Felder, customAttributes bleiben erhalten")
-
-
-def test_custom_attribute_can_be_changed(client: WeclappClient, records: _TestRecords) -> None:
-    current = client.users.get(records.user.id)
-    new_value = f"{records.personnel_number}-2"
-    changes = UserUpdate(custom_attributes=[CustomAttribute.of_string(records.definition.id, new_value)])
-    updated = client.users.update(current, changes)
-    attribute = updated.custom_attribute(records.definition.id)
-    assert attribute is not None
-    assert attribute.string_value == new_value
-    restore = UserUpdate(custom_attributes=[CustomAttribute.of_string(records.definition.id, records.personnel_number)])
-    client.users.update(updated, restore)
-
-
-def test_employee_update(client: WeclappClient, records: _TestRecords, report: IntegrationReport) -> None:
     current = client.employees.get(records.employee.id)
-    updated = client.employees.update(current, EmployeeUpdate(birth_date=date(1950, 1, 2)))
-    assert updated.birth_date == date(1950, 1, 2)
-    restored = client.employees.update(updated, EmployeeUpdate(birth_date=_BIRTH_DATE))
-    assert restored.birth_date == _BIRTH_DATE
-    report.finding("P7", "partielles PUT /employee funktioniert")
-
-
-def test_stale_version_raises_optimistic_lock_error(
-    client: WeclappClient, records: _TestRecords, report: IntegrationReport
-) -> None:
-    stale = client.users.get(records.user.id)
-    client.users.update(stale, UserUpdate(first_name=f"{stale.first_name}-a"))
-    with pytest.raises(OptimisticLockError) as error_info:
-        client.users.update(stale, UserUpdate(first_name=f"{stale.first_name}-b"))
-    report.finding("P10", f"409: problem_type={error_info.value.problem_type}")
-
-
-def test_second_employee_for_the_same_user(
-    client: WeclappClient, records: _TestRecords, cleanup: Cleanup, report: IntegrationReport
-) -> None:
-    try:
-        duplicate = client.employees.create(EmployeeCreate(user_id=records.user.id))
-    except WeclappValidationError:
-        report.finding("P11", "zweite Personalakte für denselben User wird abgewiesen (wie im Fake angenommen)")
-        return
-    cleanup.add_employee(duplicate.id)
-    report.finding("P11", "ACHTUNG: zweite Personalakte für denselben User ist möglich, FakeWeclapp anpassen")
-    pytest.fail("weclapp allows several employees per user, the fake assumes the opposite")
-
-
-def test_dry_run_create_stores_nothing(
-    client: WeclappClient, new_email: Callable[[], str], report: IntegrationReport
-) -> None:
-    email = new_email()
-    assert client.users.create(UserCreate(email=email, status=UserStatus.NOT_ACTIVE), dry_run=True) is None
-    assert client.users.find_one(Filter.eq("email", email)) is None
-    report.finding("P1", "Dry-Run beim Anlegen speichert nichts")
+    body = {"version": current.version, "birthDate": date_to_ms(date(1950, 1, 2))}
+    params = [("ignoreMissingProperties", "true"), ("dryRun", "true")]
+    response = client._transport.request_json("PUT", entity_path("employee", current.id), params=params, json_body=body)
+    assert response.get("birthDate") == date_to_ms(date(1950, 1, 2))
+    assert response.get("userId") == records.user.id, "ignoreMissingProperties=true is not honoured"
+    assert response.get("entryDate") == date_to_ms(_ENTRY_DATE), "ignoreMissingProperties=true is not honoured"
+    assert client.employees.get(current.id).birth_date == _BIRTH_DATE, "the dry run stored the change"
+    report.finding("P7", "ignoreMissingProperties=true bei PUT /employee: nicht gesendete Felder bleiben erhalten")

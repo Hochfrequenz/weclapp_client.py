@@ -178,7 +178,9 @@ uv run codespell --ignore-words=domain-specific-terms.txt src README.md
 
 Integration tests against a real weclapp tenant live in `unittests/integration/` and are skipped unless
 `WECLAPP_API_TOKEN` and `WECLAPP_BASE_URL` (or `WECLAPP_TENANT`) are set. Tests marked `integration` only read and
-send dry runs; tests marked `integration_write` create test records and additionally need `WECLAPP_ALLOW_WRITES=1`.
+send dry runs; tests marked `integration_write` create one test user with an employee record and additionally need
+`WECLAPP_ALLOW_WRITES=1`. The records are kept for manual checks; `integration_cleanup` removes them afterwards and
+also needs `WECLAPP_IT_CLEANUP=1`.
 See [docs/integrationstests.md](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/integrationstests.md)
 (German).
 
