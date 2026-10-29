@@ -78,6 +78,18 @@ def test_create_employee_assigns_employee_number(fake: FakeWeclapp, client: Wecl
     assert client.employees.for_user(user.id) == first
 
 
+def test_employee_entry_date_round_trip(fake: FakeWeclapp, client: WeclappClient) -> None:
+    created = client.employees.create(
+        EmployeeCreate(user_id=fake.add_user(email="a@example.com").id, entry_date=date(2026, 11, 1))
+    )
+    added = fake.add_employee(user_id=fake.add_user(email="b@example.com").id, entry_date=date(2020, 4, 1))
+
+    assert created.entry_date == date(2026, 11, 1)
+    assert client.employees.get(created.id) == created
+    assert client.employees.get(added.id).entry_date == date(2020, 4, 1)
+    assert [employee.entry_date for employee in fake.employees] == [date(2026, 11, 1), date(2020, 4, 1)]
+
+
 def test_current_user_is_not_part_of_users(fake: FakeWeclapp, client: WeclappClient) -> None:
     assert client.users.current().username == "api-user@example.com"
     assert fake.users == []
@@ -271,11 +283,12 @@ def test_invalid_json_is_rejected(fake: FakeWeclapp) -> None:
     assert _raw(fake, "PUT", f"user/id/{user.id}", json=["a list"]).status_code == 400
 
 
-def test_duplicate_email_is_rejected(fake: FakeWeclapp, client: WeclappClient) -> None:
-    fake.add_user(email="Erika@example.com")
-    with pytest.raises(WeclappValidationError) as error_info:
-        client.users.create(_new_user("erika@example.com"))
-    assert error_info.value.validation_errors[0].type == "duplicate"
+def test_duplicate_email_is_accepted(fake: FakeWeclapp, client: WeclappClient) -> None:
+    first = fake.add_user(email="erika@example.com")
+    second = client.users.create(_new_user("erika@example.com"))
+
+    assert second.id != first.id
+    assert len(client.users.list(Filter.eq("email", "erika@example.com"))) == 2
 
 
 def test_employee_needs_an_existing_user(client: WeclappClient) -> None:
@@ -287,8 +300,9 @@ def test_employee_needs_an_existing_user(client: WeclappClient) -> None:
 def test_user_can_have_only_one_employee(fake: FakeWeclapp, client: WeclappClient) -> None:
     user = fake.add_user(email="a@example.com")
     client.employees.create(EmployeeCreate(user_id=user.id))
-    with pytest.raises(WeclappValidationError):
+    with pytest.raises(WeclappValidationError) as error_info:
         client.employees.create(EmployeeCreate(user_id=user.id))
+    assert error_info.value.validation_errors[0].type == "consistency"
 
 
 def test_custom_attribute_definitions_are_read_only_via_api(fake: FakeWeclapp) -> None:

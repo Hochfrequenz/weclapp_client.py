@@ -6,7 +6,7 @@ does not necessarily run all checks of a real request. The write tests (tier 2) 
 """
 
 import itertools
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from typing import Any
 
@@ -14,7 +14,7 @@ import pytest
 
 from weclapp_client import Filter, NotFoundError, WeclappApiError, WeclappClient, WeclappValidationError
 from weclapp_client._http import entity_path
-from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, UserCreate, UserStatus
+from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, User, UserCreate, UserStatus
 
 from .conftest import TEST_LAST_NAME, Cleanup, IntegrationReport
 
@@ -39,7 +39,12 @@ def _rejection(call: Callable[[], object]) -> str:
     try:
         call()
     except WeclappValidationError as error:
-        issue_types = sorted({issue.type or "?" for issue in error.validation_errors})
+        issue_types = sorted(
+            {
+                f"{issue.type or '?'} ({issue.error_code})" if issue.error_code else issue.type or "?"
+                for issue in error.validation_errors
+            }
+        )
         return f"abgewiesen (400, validationErrors: {', '.join(issue_types) or 'keine'})"
     except WeclappApiError as error:
         return f"abgewiesen (HTTP {error.status_code}, {error.problem_type})"
@@ -105,23 +110,98 @@ def test_custom_attribute_selection_and_filter(
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# birth dates (P5)
+# date-only fields (P5)
 
 
-def test_birth_date_convention(client: WeclappClient, report: IntegrationReport) -> None:
-    params = [("birthDate-notnull", ""), ("properties", "id,birthDate"), ("page", "1"), ("pageSize", "200")]
+def _time_of_day(timestamp_ms: int) -> str:
+    offset = timestamp_ms % _DAY_MS
+    return _OFFSET_NAMES.get(offset, f"{offset / _HOUR_MS:g}:00 UTC")
+
+
+@pytest.mark.parametrize(("property_name", "label"), [("birthDate", "Geburtsdatum"), ("entryDate", "Eintrittsdatum")])
+def test_date_convention(client: WeclappClient, report: IntegrationReport, property_name: str, label: str) -> None:
+    params = [
+        (f"{property_name}-notnull", ""),
+        ("properties", f"id,{property_name}"),
+        ("page", "1"),
+        ("pageSize", "200"),
+    ]
     employees = _raw(client, "GET", "employee", params)["result"]
     offsets = Counter(
-        _OFFSET_NAMES.get(employee["birthDate"] % _DAY_MS, "andere Uhrzeit")
-        for employee in employees
-        if isinstance(employee.get("birthDate"), int)
+        _time_of_day(employee[property_name]) for employee in employees if isinstance(employee.get(property_name), int)
     )
     if not offsets:
-        report.finding("P5", "nicht prüfbar, kein Employee mit Geburtsdatum")
+        report.finding("P5", f"{property_name} nicht prüfbar, kein Employee mit {label}")
         return
     summary = ", ".join(f"{name}: {count}" for name, count in offsets.most_common())
-    report.finding("P5", f"gespeicherte Geburtsdaten ({sum(offsets.values())} geprüft): {summary}")
-    report.manual("P5: für einen Employee das Geburtsdatum in der Oberfläche mit dem Wert im Client vergleichen")
+    report.finding("P5", f"gespeicherte Werte von {property_name} ({sum(offsets.values())} geprüft): {summary}")
+    report.manual(f"P5: für einen Employee das {label} in der Oberfläche mit dem Wert im Client vergleichen")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# conventions in the existing data (P1, P3, P4, P11); only counts are reported
+
+
+def _username_convention(username: str | None, email: str | None) -> str:
+    if not username:
+        return "ohne username"
+    if not email:
+        return "ohne E-Mail"
+    if username == email:
+        return "gleich der E-Mail-Adresse"
+    if username == email.lower():
+        return "gleich der E-Mail-Adresse in Kleinschreibung"
+    if username.lower() == email.lower():
+        return "gleich der E-Mail-Adresse in anderer Schreibweise"
+    if "@" not in username:
+        return "ohne @ gebildet"
+    return "eine andere E-Mail-Adresse"
+
+
+def test_existing_usernames_and_emails(client: WeclappClient, report: IntegrationReport) -> None:
+    users = client.users.list(properties=["username", "email", "status"])
+    conventions = Counter(_username_convention(user.username, user.email) for user in users)
+    summary = ", ".join(f"{name}: {count}" for name, count in conventions.most_common())
+    report.finding("P4", f"username bestehender User ({len(users)}): {summary}")
+
+    by_email: defaultdict[str, list[User]] = defaultdict(list)
+    for user in users:
+        if user.email:
+            by_email[user.email.lower()].append(user)
+    groups = [group for group in by_email.values() if len(group) > 1]
+    if not groups:
+        report.finding("P4", "keine E-Mail-Adresse kommt (ohne Groß-/Kleinschreibung) mehrfach vor")
+        return
+    same_spelling = sum(1 for group in groups if len({user.email for user in group}) < len(group))
+    statuses = Counter(str(user.status or "ohne Status") for group in groups for user in group)
+    status_summary = ", ".join(f"{name}: {count}" for name, count in statuses.most_common())
+    report.finding(
+        "P4",
+        f"{len(groups)} E-Mail-Adressen kommen mehrfach vor ({same_spelling} davon in gleicher Schreibweise); "
+        f"Status der betroffenen User: {status_summary}",
+    )
+
+
+def test_existing_employee_records(client: WeclappClient, report: IntegrationReport) -> None:
+    status_by_user = {user.id: user.status for user in client.users.iterate(properties=["status"])}
+    employees = client.employees.list(properties=["userId"])
+    per_user = Counter(employee.user_id for employee in employees if employee.user_id)
+
+    without_user = len(employees) - sum(per_user.values())
+    report.finding("P1", f"bestehende Personalakten ohne userId: {without_user} von {len(employees)}")
+
+    statuses = Counter(
+        str(status_by_user[user_id] or "ohne Status") if user_id in status_by_user else "User nicht gefunden"
+        for user_id in per_user
+    )
+    summary = ", ".join(f"{name}: {count}" for name, count in statuses.most_common())
+    report.finding("P3", f"Status der User mit Personalakte: {summary or 'keine Personalakten'}")
+
+    several = sum(1 for count in per_user.values() if count > 1)
+    if several:
+        report.finding("P11", f"ACHTUNG: {several} User haben mehr als eine Personalakte, FakeWeclapp anpassen")
+    else:
+        report.finding("P11", "in den bestehenden Daten hat kein User mehr als eine Personalakte")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -156,6 +236,15 @@ def test_dry_run_create_minimal_user(
     minimal = {"email": new_email(), "status": "NOT_ACTIVE", "lastName": TEST_LAST_NAME}
     outcome = _rejection(lambda: _raw(client, "POST", "user", [("dryRun", "true")], minimal))
     report.finding("P1", f"Dry-Run ohne canEditDashboard: {outcome}")
+
+
+def test_dry_run_username_cannot_be_set(
+    client: WeclappClient, report: IntegrationReport, new_email: Callable[[], str], verified_dry_run: None
+) -> None:
+    email = new_email()
+    body = {"email": email, "status": "NOT_ACTIVE", "lastName": TEST_LAST_NAME, "username": email}
+    outcome = _rejection(lambda: _raw(client, "POST", "user", [("dryRun", "true")], body))
+    report.finding("P4", f"Dry-Run mit username gleich der E-Mail-Adresse: {outcome}")
 
 
 def test_dry_run_user_without_email_is_rejected(client: WeclappClient, report: IntegrationReport) -> None:

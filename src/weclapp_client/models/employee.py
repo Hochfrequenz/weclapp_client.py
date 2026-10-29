@@ -27,6 +27,7 @@ class Employee(WeclappEntity):
     user_id: str | None = None
     """id of the linked user, which holds name and e-mail address"""
     birth_date: WeclappDate | None = None
+    entry_date: WeclappDate | None = None
     employment_status: EmploymentStatus | str | None = Field(default=None, union_mode="left_to_right")
     """an :class:`EmploymentStatus`, or the raw value if weclapp introduces a new status"""
 
@@ -36,6 +37,7 @@ class EmployeeCreate(WeclappCreateModel):
 
     user_id: str = Field(min_length=1)
     birth_date: WeclappDate | None = None
+    entry_date: WeclappDate | None = None
 
 
 class EmployeeUpdate(WeclappUpdateModel):

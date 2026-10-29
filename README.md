@@ -12,9 +12,9 @@ It deliberately covers only the endpoints needed to synchronise employee master 
 The synchronisation logic itself (matching, diffing, reporting) lives in a separate repository that uses this package
 as a dependency.
 
-> **Status:** early `0.x` version. The client is fully tested against mocks and an in-memory fake, but not yet
-> against a real weclapp tenant ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)), so the API may
-> still change. See the [implementation plan](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/umsetzungsplan.md)
+> **Status:** early `0.x` version. The client is fully tested against mocks and an in-memory fake and has been
+> checked against a real weclapp tenant with reads and dry runs. A test that creates records is still pending
+> ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)), so the API may still change. See the [implementation plan](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/umsetzungsplan.md)
 > and the [API analysis](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/weclapp_api_analyse.md)
 > (both German) and the [open issues](https://github.com/Hochfrequenz/weclapp_client.py/issues).
 
@@ -54,7 +54,9 @@ with WeclappClient(WeclappConfig.from_env()) as client:
         )
     employee = client.employees.for_user(user.id)
     if employee is None:
-        client.employees.create(EmployeeCreate(user_id=user.id, birth_date=date(1985, 4, 12)))
+        client.employees.create(
+            EmployeeCreate(user_id=user.id, birth_date=date(1985, 4, 12), entry_date=date(2026, 11, 1))
+        )
     elif employee.birth_date != date(1985, 4, 12):
         client.employees.update(employee, EmployeeUpdate(birth_date=date(1985, 4, 12)))
 ```
@@ -62,6 +64,9 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - `iterate()`/`list()` page through all entities; `properties=[...]` loads only the given properties
   (`id` and `version` are always included).
 - `find_one()` returns `None` if nothing matches and raises `AmbiguousResultError` if more than one entity matches.
+  weclapp does not require unique e-mail addresses, so a lookup by e-mail can match several users.
+- `get_by_key()` needs the key of the custom attribute. weclapp may generate it (a random string) when the attribute
+  is created in the user interface; in that case, load the definition by its id with `get()`.
 - `create()` and `update()` accept `dry_run=True`: weclapp validates the data without storing it, and the method
   returns `None` (weclapp does not assign ids in dry runs).
 - Read models (`User`, `Employee`, ...) guarantee `id` and `version`. Write models (`UserCreate`, `UserUpdate`, ...)
@@ -81,7 +86,7 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - **No personal data in logs:** the logger `weclapp_client` only logs method, path and status. The API token never
   appears in logs, `repr` or exceptions.
 - Unknown properties in responses are ignored, unknown enum values are kept as strings.
-- Date-only fields (e.g. `birth_date`) are written as midnight UTC; when reading, timestamps are rounded to the
+- Date-only fields (`birth_date`, `entry_date`) are written as midnight UTC; when reading, timestamps are rounded to the
   nearest midnight, so dates stored at local midnight (e.g. Europe/Berlin) are read correctly.
 
 ### Exceptions
@@ -148,8 +153,8 @@ def test_timeout_while_creating_an_employee() -> None:
   inconsistent states (e.g. duplicate personnel numbers) can be tested as well.
 - `users`, `employees`, `requests` and `write_requests` show the state and the requests received.
 - `fail_next()` lets the next matching request fail with a status code or an exception.
-- Some rules of the fake are assumptions until they are verified against a real tenant: e-mail addresses are unique
-  (case-insensitive) and a user has at most one employee.
+- Like weclapp, the fake accepts several users with the same e-mail address, so check for an existing user yourself
+  before creating one. A user has at most one employee.
 
 ## Development
 
@@ -173,7 +178,9 @@ uv run codespell --ignore-words=domain-specific-terms.txt src README.md
 
 Integration tests against a real weclapp tenant live in `unittests/integration/` and are skipped unless
 `WECLAPP_API_TOKEN` and `WECLAPP_BASE_URL` (or `WECLAPP_TENANT`) are set. Tests marked `integration` only read and
-send dry runs; tests marked `integration_write` create test records and additionally need `WECLAPP_ALLOW_WRITES=1`.
+send dry runs; tests marked `integration_write` create one test user with an employee record and additionally need
+`WECLAPP_ALLOW_WRITES=1`. The records are kept for manual checks; `integration_cleanup` removes them afterwards and
+also needs `WECLAPP_IT_CLEANUP=1`.
 See [docs/integrationstests.md](https://github.com/Hochfrequenz/weclapp_client.py/blob/main/docs/integrationstests.md)
 (German).
 

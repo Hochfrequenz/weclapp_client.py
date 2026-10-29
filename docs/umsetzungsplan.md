@@ -28,7 +28,7 @@ Abweichungen vom ursprünglichen Plan:
   `v0.1.0a1` auf PyPI statt nur als Git-Tag ([#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10)). `v0.1.0` bleibt dem Stand nach den
   Integrationstests ([#9](https://github.com/Hochfrequenz/weclapp_client.py/issues/9)) vorbehalten. Die zweite Vorabversion `v0.1.0a2` entfällt, weil `a1` den Fake
   schon enthält.
-- Offene Fragen und To-dos stehen als Issues im Repo ([#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8)–[#19](https://github.com/Hochfrequenz/weclapp_client.py/issues/19)), siehe Abschnitt 7.
+- Offene Fragen und To-dos stehen als Issues im Repo ([#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8)–[#13](https://github.com/Hochfrequenz/weclapp_client.py/issues/13); die Fragen für das Sync-Repo liegen in [HR-Sync](https://github.com/Hochfrequenz/HR-Sync/issues)), siehe Abschnitt 7.
 
 ---
 
@@ -346,8 +346,8 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
   | `User` | `id`, `version`, `created_date`, `last_modified_date`, `username`, `email`, `first_name`, `last_name`, `status`, `can_edit_dashboard`, `custom_attributes`, dazu die Hilfsmethode `custom_attribute(definition_id)` |
   | `UserCreate` | `email`, `status`, `can_edit_dashboard` (alle drei Pflicht laut Spec), `first_name`, `last_name`, `custom_attributes` |
   | `UserUpdate` | `email`, `first_name`, `last_name`, `status`, `custom_attributes` |
-  | `Employee` | `id`, `version`, `created_date`, `last_modified_date`, `employee_number`, `user_id`, `birth_date` |
-  | `EmployeeCreate` | `user_id` (Pflicht laut Spec), `birth_date` |
+  | `Employee` | `id`, `version`, `created_date`, `last_modified_date`, `employee_number`, `user_id`, `birth_date`, `entry_date` |
+  | `EmployeeCreate` | `user_id` (Pflicht laut Spec), `birth_date`, `entry_date` |
   | `EmployeeUpdate` | `birth_date` |
   | `CustomAttribute` | `attribute_definition_id`, `string_value`, dazu die Fabrikmethode `of_string(definition_id, value)` |
   | `CustomAttributeDefinition` | `id`, `version`, `attribute_key`, `attribute_type`, `label`, `active`, `attribute_entity_type`, `entities` |
@@ -458,19 +458,21 @@ das ohnehin eine Abhängigkeit ist.
 Voraussetzung ist der Zugang zum Test-Tenant (K1). Dort wird eingerichtet:
 
 - ein technischer API-User mit Token
-- ein Custom Attribute „Personalnummer“ (Typ `STRING`, Entität `user`, Key z. B.
-  `personalnummer`)
+- ein Custom Attribute „Personalnummer“ (Typ `STRING`, Entität `user`). Den Key vergibt
+  weclapp unter Umständen selbst, die Tests finden das Attribut deshalb auch über seine ID.
 
-Welche Art von Tenant es wird, ist noch offen (K1). Die Integrationstests sind deshalb in zwei Stufen aufgeteilt
-und funktionieren für beide Varianten (Anleitung: [integrationstests.md](integrationstests.md)):
+Es gibt nur den Produktiv-Tenant (K1). Die Integrationstests sind in zwei Stufen aufgeteilt und funktionieren für
+beide Varianten (Anleitung: [integrationstests.md](integrationstests.md)):
 
 | Stufe | Marker | Inhalt | Test-Tenant | Produktiv-Tenant |
 |---|---|---|---|---|
 | 1 | `integration` | nur Lesezugriffe und Dry-Runs | ✅ | ✅ |
-| 2 | `integration_write` | legt markierte Testdatensätze an, ändert sie und räumt auf, nur mit `WECLAPP_ALLOW_WRITES=1` | ✅ | nur nach Absprache: verbraucht Mitarbeiternummern, User bleiben nach `softDelete` als Rest, eventuell gehen Mails raus (P2) |
+| 2 | `integration_write` | legt genau einen markierten Test-User mit Personalakte an, alles Weitere nur lesend oder als Dry-Run, nur mit `WECLAPP_ALLOW_WRITES=1`. Aufgeräumt wird danach in einem eigenen Schritt (`integration_cleanup`) | ✅ | nur nach Absprache: verbraucht eine Mitarbeiternummer, der User bleibt nach `softDelete` als Rest, falls weclapp das `DELETE` der API v1 ablehnt, eventuell gehen Mails raus (P2) |
 
 Mit dem Produktiv-Tenant allein bleiben P2, P3 und die `username`-Vergabe (P4) offen, bis ein abgestimmter
-Schreibtest läuft. Die übrigen Prüfpunkte deckt Stufe 1 ab.
+Schreibtest läuft. Die übrigen Prüfpunkte deckt Stufe 1 ab. Stufe 1 ist am 29.10.2026 gelaufen, die Befunde
+stehen in der [Analyse, Abschnitt 10](weclapp_api_analyse.md#10-befunde-aus-dem-tenant-ap-6). Für den
+Schreibtest sind höchstens zwei Anlagen abgestimmt: ein User und eine Personalakte.
 
 Prüfpunkte (die ⚠-Punkte aus der Analyse):
 
@@ -490,9 +492,10 @@ Prüfpunkte (die ⚠-Punkte aus der Analyse):
 
 - Die Integrationstests liegen in `unittests/integration/`. Sie laufen nur, wenn
   `WECLAPP_API_TOKEN` und `WECLAPP_BASE_URL` bzw. `WECLAPP_TENANT` gesetzt sind, also nicht in der CI.
-- Stufe 2 legt nur markierte Testdatensätze an (Nachname `ZZ-Test weclapp-client`) und räumt sie
-  danach auf: `DELETE /employee/id/{id}` und `POST /user/id/{id}/softDelete`. Beides läuft über
-  Test-Helfer, nicht über die öffentliche API.
+- Stufe 2 legt nur markierte Testdatensätze an (Nachname `ZZ-Test weclapp-client`) und lässt sie
+  für die manuellen Prüfungen stehen. Danach entfernt sie ein eigener Schritt: `DELETE /employee/id/{id}`,
+  dann `DELETE /user/id/{id}` der API v1, und nur wenn weclapp das ablehnt `POST /user/id/{id}/softDelete`.
+  Das läuft über Test-Helfer, nicht über die öffentliche API.
 - Am Ende gibt pytest eine Zusammenfassung aus: Befunde je Prüfpunkt, noch manuell zu Prüfendes
   (z. B. Mails, Anzeige in der Oberfläche) und den Stand des Aufräumens. Personenbezogene Daten
   enthält sie nicht.
@@ -551,28 +554,28 @@ AP 0 --> AP 2 --+                 |                     |
 
 ## 7. Klärungen
 
-### 7.1 Klärungen für dieses Repo (Stand 07.10.2026)
+### 7.1 Klärungen für dieses Repo (Stand 29.10.2026)
 
 | # | Thema | Stand | Noch zu tun | Blockiert | Issue |
 |---|---|---|---|---|---|
-| K1 | Test-Tenant | Der Zugang wird organisiert. Ob es ein eigener Test-Tenant oder der Produktiv-Tenant wird, ist noch unklar | Art des Tenants festlegen. Die Einschränkungen für den Produktiv-Tenant stehen in AP 6 | AP 6 | [#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8) |
-| K2 | Bereitstellung des Pakets | **entschieden: PyPI.** Zuerst erscheint die Vorabversion `v0.1.0a1` mit dem aktuellen Stand, `v0.1.0` nach den Integrationstests. Der Publish-Workflow ist aktiviert | Jemand mit Admin-Rechten richtet Trusted Publishing auf PyPI und das GitHub-Environment `release` ein | AP 7 | [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10) |
-| K3 | Sync-Repo | **geklärt:** Das Sync-Repo wird neu angelegt und läuft mit der neuesten Python-Version. Die Untergrenze 3.11 bleibt, neue Versionen kommen in die CI-Matrix | Schnittstelle (Abschnitt 2.2) abstimmen, sobald das Sync-Repo startet | nichts | [#12](https://github.com/Hochfrequenz/weclapp_client.py/issues/12) |
+| K1 | Test-Tenant | **geklärt: nur der Produktiv-Tenant.** Der Zugang ist da. Lesen und Dry-Runs sind frei, Anlegen nur abgestimmt (höchstens ein User und eine Personalakte) | Anlegetest (AP 6), technischer API-User (P9) | AP 6 (Rest) | [#8](https://github.com/Hochfrequenz/weclapp_client.py/issues/8) |
+| K2 | Bereitstellung des Pakets | **erledigt: PyPI.** Trusted Publishing ist eingerichtet, die Vorabversion `v0.1.0a1` liegt auf PyPI. `v0.1.0` folgt nach den Integrationstests | `v0.1.0` veröffentlichen | AP 7 | [#10](https://github.com/Hochfrequenz/weclapp_client.py/issues/10) |
+| K3 | Sync-Repo | **geklärt:** Das Sync-Repo [HR-Sync](https://github.com/Hochfrequenz/HR-Sync) läuft mit der neuesten Python-Version. Die Untergrenze 3.11 bleibt, neue Versionen kommen in die CI-Matrix | Schnittstelle (Abschnitt 2.2) mit HR-Sync abstimmen | nichts | [#12](https://github.com/Hochfrequenz/weclapp_client.py/issues/12) |
 
 ### 7.2 Übergabe an das Sync-Repo
 
 Diese Punkte stammen aus der Analyse. Sie betreffen die Sync-Logik oder den Betrieb, **nicht
 den Client**, denn der Client unterstützt jedes mögliche Ergebnis. Sie stehen nur hier, damit
-sie beim Start des Sync-Repos nicht verloren gehen.
+sie beim Start des Sync-Repos nicht verloren gehen. Die Issues liegen inzwischen im Repo HR-Sync.
 
 | # | Frage | Hinweis | Issue |
 |---|---|---|---|
-| S1 | Kosten User mit `NOT_ACTIVE` und ohne Lizenz etwas? | Vor dem Go-live klären. Kostet jedes Konto etwas, ist das Vorgehen „ein User pro Mitarbeiter“ zu überdenken | [#14](https://github.com/Hochfrequenz/weclapp_client.py/issues/14) |
-| S2 | Haben alle Mitarbeiter eine E-Mail-Adresse? Wenn nicht: Regel für Platzhalter festlegen | `email` ist beim Anlegen eines Users Pflicht | [#15](https://github.com/Hochfrequenz/weclapp_client.py/issues/15) |
-| S3 | Verschickt `POST /user` automatisch Mails? | Das API-Verhalten prüft der Client in AP 6 (P2), die Konsequenz zieht das Sync-Repo | [#16](https://github.com/Hochfrequenz/weclapp_client.py/issues/16) |
-| S4 | Gibt es in weclapp schon User oder Mitarbeiter, die beim Erstabgleich zugeordnet werden müssen? | betrifft den ersten Produktivlauf | [#17](https://github.com/Hochfrequenz/weclapp_client.py/issues/17) |
-| S5 | Lässt sich der Nummernkreis für Mitarbeiter manuell befüllen? (weclapp-Support) | Einzige Stelle, die den Client berühren könnte: Wird `employeeNumber` per API beschreibbar, bekommt `EmployeeCreate` das Feld. Bis dahin trägt das Custom Attribute die Personalnummer | [#18](https://github.com/Hochfrequenz/weclapp_client.py/issues/18) |
-| S6 | Betrieb des Sync-Jobs: Zeitplan, Hosting, Secrets | – | [#19](https://github.com/Hochfrequenz/weclapp_client.py/issues/19) |
+| S1 | Kosten User mit `NOT_ACTIVE` und ohne Lizenz etwas? | Vor dem Go-live klären. Kostet jedes Konto etwas, ist das Vorgehen „ein User pro Mitarbeiter“ zu überdenken | [HR-Sync#4](https://github.com/Hochfrequenz/HR-Sync/issues/4) |
+| S2 | Haben alle Mitarbeiter eine E-Mail-Adresse? Wenn nicht: Regel für Platzhalter festlegen | `email` ist beim Anlegen eines Users Pflicht | [HR-Sync#5](https://github.com/Hochfrequenz/HR-Sync/issues/5) |
+| S3 | Verschickt `POST /user` automatisch Mails? | Das API-Verhalten prüft der Client in AP 6 (P2), die Konsequenz zieht das Sync-Repo | [HR-Sync#6](https://github.com/Hochfrequenz/HR-Sync/issues/6) |
+| S4 | Gibt es in weclapp schon User oder Mitarbeiter, die beim Erstabgleich zugeordnet werden müssen? | betrifft den ersten Produktivlauf | [HR-Sync#7](https://github.com/Hochfrequenz/HR-Sync/issues/7) |
+| S5 | Lässt sich der Nummernkreis für Mitarbeiter manuell befüllen? (weclapp-Support) | Einzige Stelle, die den Client berühren könnte: Wird `employeeNumber` per API beschreibbar, bekommt `EmployeeCreate` das Feld. Bis dahin trägt das Custom Attribute die Personalnummer | [HR-Sync#8](https://github.com/Hochfrequenz/HR-Sync/issues/8) |
+| S6 | Betrieb des Sync-Jobs: Zeitplan, Hosting, Secrets | – | [HR-Sync#9](https://github.com/Hochfrequenz/HR-Sync/issues/9) |
 
 ---
 

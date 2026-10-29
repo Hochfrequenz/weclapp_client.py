@@ -5,10 +5,13 @@ Stand: 30.09.2026 · Grundlage: offizielle OpenAPI-Specs
 [`openapi_v2.yaml`](https://www.weclapp.com/api/openapi_v2.yaml)
 (v1: 732 Pfade, v2: 712 Pfade), Doku unter <https://www.weclapp.com/api/>.
 
-> Diese Analyse stützt sich allein auf die öffentliche Spezifikation, inklusive der
-> weclapp-eigenen Metadaten `x-weclapp` (z. B. `required`, `entity`). Einen Test-Tenant gibt
-> es noch nicht. Punkte, die wir erst dort prüfen können, sind mit **⚠ verifizieren**
-> markiert.
+> Diese Analyse stützt sich zunächst allein auf die öffentliche Spezifikation, inklusive der
+> weclapp-eigenen Metadaten `x-weclapp` (z. B. `required`, `entity`). Punkte, die wir erst
+> an einem Tenant prüfen können, sind mit **⚠ verifizieren** markiert.
+>
+> **Nachtrag 29.10.2026:** Stufe 1 der Integrationstests (nur Lesezugriffe und Dry-Runs) ist
+> gegen den Produktiv-Tenant gelaufen. Die Befunde stehen in [Abschnitt 10](#10-befunde-aus-dem-tenant-ap-6),
+> die geklärten ⚠-Punkte sind mit ✅ markiert.
 
 ---
 
@@ -19,7 +22,7 @@ Stand: 30.09.2026 · Grundlage: offizielle OpenAPI-Specs
 | A1 | Richtung | **Nur schreibend nach weclapp.** Das Quellsystem führt, weclapp ist das Ziel. |
 | A2 | Feldumfang (Phase 1) | **Name, Geburtsdatum, Mitarbeiternummer.** Weitere Felder ggf. später. |
 | A3 | Neue Mitarbeiter | Werden in weclapp **angelegt**. Sie arbeiten **nicht selbst** mit weclapp, sondern werden dort nur verwaltet. **Klärungsbedarf, siehe Abschnitt 3.** |
-| A4 | Test-Tenant | Kommt noch, Zugriff wird organisiert. |
+| A4 | Test-Tenant | Es gibt nur den Produktiv-Tenant. Lesen und Dry-Runs sind frei, Anlegen nur abgestimmt (Abschnitt 10). |
 | A5 | Aufteilung | Die Sync-Logik liegt in einem **eigenen Sync-Repo**. Dieses Repo liefert nur den API-Client als Paket, das dort als Abhängigkeit eingebunden wird. |
 
 ---
@@ -65,8 +68,8 @@ Für „nur verwaltete“ Mitarbeiter heißt das:
   diesem `userId` an.
 - Den Endpunkt **`/user/id/{id}/invite` rufen wir nicht auf**, damit keine Einladungs-Mail
   rausgeht.
-- **`email` ist Pflicht und muss vermutlich eindeutig sein.** Jeder Mitarbeiter braucht
-  also eine E-Mail-Adresse.
+- **`email` ist Pflicht, muss aber nicht eindeutig sein** (✅ P4, Abschnitt 10). Jeder
+  Mitarbeiter braucht also eine E-Mail-Adresse, und wer anlegt, prüft Dubletten selbst.
 
 **Offene Fragen an weclapp bzw. den Tenant-Admin:**
 
@@ -74,11 +77,13 @@ Für „nur verwaltete“ Mitarbeiter heißt das:
    dafür eine Lizenz- oder Benutzerart vorgesehen?
 2. **E-Mail:** Haben alle Mitarbeiter eine E-Mail-Adresse im Quellsystem? Wenn nicht,
    brauchen wir eine Regel für Platzhalter, z. B. `personalnummer@noreply.<firma>`.
-   ⚠ verifizieren, ob weclapp die E-Mail auf Eindeutigkeit prüft.
+   ✅ geprüft: weclapp prüft die E-Mail nicht auf Eindeutigkeit (P4).
 3. **Automatische Mails:** Verschickt `POST /user` automatisch eine Mail, oder passiert das
-   nur über `invite`? ⚠ verifizieren
+   nur über `invite`? ⚠ verifizieren (P2, braucht einen echten Anlegetest)
 4. **Status:** Darf ein neuer User direkt mit `NOT_ACTIVE` angelegt werden, und
-   funktioniert die Personalakte dann trotzdem vollständig? ⚠ verifizieren
+   funktioniert die Personalakte dann trotzdem vollständig? Ein Dry-Run mit `NOT_ACTIVE`
+   wird akzeptiert. Das Sync-Repo legt neue User inzwischen aber mit `ACTIVE` an, und dafür
+   gibt es im Tenant viele Personalakten (P3).
 5. **Bestand:** Gibt es in weclapp schon User oder Mitarbeiter, die wir beim ersten Lauf
    zuordnen müssen, statt sie doppelt anzulegen?
 
@@ -100,7 +105,10 @@ b), können wir später zusätzlich oder stattdessen die echte `employeeNumber` 
 
 - **Geburtsdatum:** Die API erwartet Millisekunden seit Epoch (UTC). Wir liefern das Datum
   als Mitternacht UTC. ⚠ verifizieren, dass die weclapp-Oberfläche nicht den Vortag
-  anzeigt, weil sie in eine andere Zeitzone umrechnet.
+  anzeigt, weil sie in eine andere Zeitzone umrechnet. Teilweise geprüft (P5): Die
+  Oberfläche selbst speichert reine Datumsfelder als Mitternacht deutscher Zeit, und solche
+  Werte liest der Client richtig. Wie sie einen vom Client geschriebenen Wert anzeigt, klärt
+  der Anlegetest.
 - **Namenslänge:** `firstName` und `lastName` dürfen höchstens 50 Zeichen lang sein. Längere
   Namen führen zu einem Validierungsfehler, den wir sauber melden müssen.
 - **Datenschutz:** Das Geburtsdatum ist personenbezogen, gehört aber nicht zu den besonders
@@ -181,8 +189,8 @@ Eingabe: personalnummer, vorname, nachname, geburtsdatum, email
   (`properties=id,version,firstName,lastName,email,customAttributes`) und alle Employees
   (`properties=id,version,userId,birthDate,employeeNumber`) laden und lokal abgleichen.
   Das sind wenige große Requests statt vieler kleiner, wie weclapp es empfiehlt.
-- ⚠ verifizieren: ob `customAttributes` in `properties=` angefragt werden kann, und ob der
-  Filter `customAttribute<id>-eq` für String-Attribute am User funktioniert.
+- ✅ geprüft (P6): `customAttributes` lässt sich in `properties=` anfragen, und der Filter
+  `customAttribute<id>-eq` findet User über ein String-Attribut.
 
 ---
 
@@ -193,10 +201,10 @@ Eingabe: personalnummer, vorname, nachname, geburtsdatum, email
 | Feld | Typ | Pflicht | Bemerkung |
 |---|---|---|---|
 | `id`, `version`, `createdDate`, `lastModifiedDate` | | | read-only, `version` für Optimistic Locking |
-| `username` | string (256) | (✓) | **read-only**, vom System vergeben (⚠ verifizieren wie, vermutlich aus der E-Mail) |
-| `email` | string (256, email) | ✓ | |
-| `status` | `ACTIVE`, `DEPARTURE`, `NOT_ACTIVE` | ✓ | für „nur verwaltete“ Mitarbeiter `NOT_ACTIVE` |
-| `canEditDashboard` | boolean | ✓ | `false` |
+| `username` | string (256) | (✓) | **read-only** (✅ per Dry-Run bestätigt), vom System vergeben, bei fast allen Usern gleich der E-Mail-Adresse (P4) |
+| `email` | string (256, email) | ✓ | nicht eindeutig (P4) |
+| `status` | `ACTIVE`, `DEPARTURE`, `NOT_ACTIVE` | ✓ | für „nur verwaltete“ Mitarbeiter `NOT_ACTIVE`, das Sync-Repo nutzt `ACTIVE` |
+| `canEditDashboard` | boolean | ✓ | `false`; ein Dry-Run ohne das Feld wird trotzdem akzeptiert (P1) |
 | `firstName`, `lastName` | string (50) | | **Name** |
 | `title`, `phoneNumber`, `mobilePhoneNumber`, `faxNumber` | string | | später ggf. |
 | `userRoles` | `[{id}]` | | → `/userRole` |
@@ -238,7 +246,7 @@ Attributes gibt es nur für den Entitätstyp `user`.
 | Feldauswahl | `properties=…`, `includeReferencedEntities=userId` | schlanke Abfragen |
 | Nulls | Null-Felder werden weggelassen, `serializeNulls=true` liefert sie mit. **Leere Strings gelten als `null`.** | beim Diffen `""` und `None` gleich behandeln |
 | Datum | ms seit Epoch (UTC) | `date` ↔ ms-Konverter |
-| Update | `PUT` ersetzt standardmäßig das ganze Objekt. Mit `?ignoreMissingProperties=true` ändert es nur die gesendeten Felder. Listen werden dabei ersetzt (fehlende Einträge werden gelöscht), **`customAttributes` dagegen pro Attribut zusammengeführt** (nicht gesendete Attribute bleiben erhalten). Der Parameter ist allgemein dokumentiert, bei `PUT /user` und `PUT /employee` aber nicht in der Spec deklariert (⚠ verifizieren) | **immer** partielles Update plus `version`. Außer `customAttributes` keine Listen senden |
+| Update | `PUT` ersetzt standardmäßig das ganze Objekt. Mit `?ignoreMissingProperties=true` ändert es nur die gesendeten Felder. Listen werden dabei ersetzt (fehlende Einträge werden gelöscht), **`customAttributes` dagegen pro Attribut zusammengeführt** (nicht gesendete Attribute bleiben erhalten). Der Parameter ist allgemein dokumentiert, bei `PUT /user` und `PUT /employee` aber nicht in der Spec deklariert (✅ bei `PUT /user` geprüft, P7; `PUT /employee` folgt mit dem Anlegetest) | **immer** partielles Update plus `version`. Außer `customAttributes` keine Listen senden |
 | Read-only- und unbekannte Felder | Werden sie beim POST/PUT mitgeschickt, gibt es **HTTP 400**, bei Feldern ohne Berechtigung **403** | Serializer sendet nur bekannte, beschreibbare Felder |
 | Optimistic Locking | Stimmt die `version` nicht, kommt `409 optimistic_lock` | neu lesen, erneut versuchen |
 | Dry-Run | `?dryRun=true` bei POST/PUT/DELETE | Probelauf der Sync ohne Änderungen |
@@ -273,8 +281,40 @@ Attributes gibt es nur für den Entitätstyp `user`.
 3. Im Tenant das **Custom Attribute „Personalnummer“** für die Entität `user` anlegen
    (Option 3.2 a).
 4. Sobald der Test-Tenant da ist: alle ⚠-Punkte per `dryRun` bzw. gegen Testdaten prüfen.
+   Lesen und Dry-Runs sind erledigt (Abschnitt 10), der Anlegetest steht noch aus.
 5. Parallel dazu den Client-Kern (Abschnitt 8) umsetzen und mit gemockten HTTP-Antworten
    testen. Dafür brauchen wir den Tenant noch nicht.
 
 Den ausgearbeiteten Plan mit Arbeitspaketen, Meilensteinen und Prüfpunkten enthält
 [umsetzungsplan.md](umsetzungsplan.md).
+
+---
+
+## 10. Befunde aus dem Tenant (AP 6)
+
+Stand 29.10.2026. Es gibt nur den Produktiv-Tenant (K1). Gelaufen ist Stufe 1 der
+Integrationstests: nur Lesezugriffe und Dry-Runs. Ein erster Dry-Run hat bestätigt, dass
+`dryRun=true` nichts speichert. Die Befunde enthalten nur strukturelle Angaben, keine Daten aus
+dem Tenant.
+
+| Punkt | Befund | Folge |
+|---|---|---|
+| P1 | `POST /user` ohne `email` wird mit 400 abgewiesen, betroffen ist das Feld `email`. Ohne `canEditDashboard` wird ein Dry-Run akzeptiert, obwohl die Spec das Feld als Pflicht führt. Alle Personalakten im Tenant haben eine `userId`. | keine, `UserCreate` sendet `canEditDashboard` weiterhin |
+| P2 | Ein Dry-Run mit `status=NOT_ACTIVE` wird akzeptiert. Ob `POST /user` eine Mail verschickt, zeigt erst ein echter Anlegetest. | offen |
+| P3 | Personalakten gibt es im Tenant nur für User mit `ACTIVE` oder `DEPARTURE`. Für `ACTIVE`, wie es das Sync-Repo nutzt, ist das der Normalfall. | für `NOT_ACTIVE` offen, für das Sync-Repo nicht mehr nötig |
+| P4 | **`username` lässt sich nicht setzen:** Einen Dry-Run von `POST /user` mit `username` weist weclapp mit 400 ab („property username is read-only“, `platform.read_only_property`). `username` ist bei fast allen Usern gleich der E-Mail-Adresse. Bei einigen ist es eine andere E-Mail-Adresse (vermutlich wurde die E-Mail später geändert) oder ein Name ohne `@`. **weclapp prüft die E-Mail nicht auf Eindeutigkeit:** Im Tenant gibt es E-Mail-Adressen in gleicher Schreibweise bei mehreren Usern, auch bei aktiven. Dry-Runs mit einer vorhandenen E-Mail werden akzeptiert, in gleicher wie in anderer Groß-/Kleinschreibung. | `FakeWeclapp` akzeptiert jetzt doppelte E-Mail-Adressen. Eine Suche per E-Mail kann mehrere User liefern, `find_one()` meldet dann `AmbiguousResultError`. Das Sync-Repo prüft Dubletten selbst. Den `username` braucht das Sync-Repo nicht. Ob weclapp ihn bei per API angelegten Usern auf die E-Mail-Adresse setzt, zeigt der Anlegetest |
+| P5 | Im Tenant haben die Personalakten kein Geburtsdatum und fast nie ein Eintrittsdatum. Das einzige vorhandene `entryDate` liegt auf Mitternacht deutscher Sommerzeit (22:00 UTC am Vortag). So speichert es die Oberfläche. | Der Client liest solche Werte durch das Runden richtig. Offen ist, wie die Oberfläche einen vom Client geschriebenen Wert anzeigt (Anlegetest) |
+| P6 | `properties=customAttributes` und der Filter `customAttribute<id>-eq` funktionieren. Den Key des Attributs „Personalnummer“ hat weclapp selbst vergeben, eine zufällige Zeichenfolge statt `personalnummer`. | Das Attribut über seine ID auflösen, wie im Sync-Repo. Die Integrationstests nehmen dafür `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID` |
+| P7 | `PUT /user?ignoreMissingProperties=true` (Dry-Run) behält nicht gesendete Felder und führt `customAttributes` pro Attribut zusammen. | wie in Client und Fake umgesetzt. `PUT /employee` folgt mit dem Anlegetest |
+| P8 | Paging mit `pageSize=1000` und `sort=id` liefert bei `/user` und `/employee` jede Entität genau einmal, passend zu `count`. | keine |
+| P9 | Der Token funktioniert. Es ist ein persönlicher Token, noch kein technischer API-User. | Die minimalen Rechte sind offen, sie sind die Grundlage für die Einrichtungsdoku |
+| P10 | 400: Problem-JSON vom Typ `validation` mit `validationErrors`. 401 bei ungültigem Token: `error` `unauthorized`, `detail` „no identity available“. 404: `not_found`. 409 bei veralteter `version`: `optimistic_lock`, auch im Dry-Run. | passt zum Fehler-Mapping des Clients |
+| P11 | Kein User hat mehr als eine Personalakte. Ein Dry-Run für eine zweite Personalakte wird mit 400 abgewiesen, `validationErrors` vom Typ `consistency`. | `FakeWeclapp` meldet den Fall jetzt ebenfalls als `consistency` |
+
+**Noch offen**, zu klären mit einem Anlegetest (ein User, eine Personalakte) und manuellen Prüfungen:
+
+- P2: Geht beim Anlegen eines Users eine Mail raus?
+- P4: Wie vergibt weclapp `username` bei einem per API angelegten User, z. B. in Kleinschreibung?
+- P5: Zeigt die Oberfläche ein vom Client geschriebenes Datum (Mitternacht UTC) am richtigen Tag an?
+- P7: `PUT /employee` mit `ignoreMissingProperties=true`, als Dry-Run am Testdatensatz
+- P9: minimale Rechte eines technischen API-Users
