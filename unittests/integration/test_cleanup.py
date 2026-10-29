@@ -31,23 +31,29 @@ def v1_transport_fixture() -> Iterator[HttpTransport]:
         yield v1_client._transport
 
 
+def _user_exists(client: WeclappClient, user_id: str) -> bool:
+    try:
+        client.users.get(user_id)
+    except NotFoundError:
+        return False
+    return True
+
+
 def _remove_user(client: WeclappClient, v1_transport: HttpTransport, user_id: str) -> str:
     path = entity_path("user", user_id)
     try:
         v1_transport.request("DELETE", path, params=[("dryRun", "true")])
         v1_transport.request("DELETE", path)
+        outcome = "DELETE (API v1) ohne Fehler"
     except NotFoundError:
-        return "mit DELETE (API v1) gelöscht, schon beim Dry-Run"
+        # also when API v1 does not offer the endpoint, so only API v2 tells whether the user is gone
+        outcome = "DELETE (API v1) mit 404 beantwortet"
     except WeclappApiError as error:
-        refused = f"DELETE (API v1) abgewiesen (HTTP {error.status_code}, {error.problem_type}: {error.detail})"
-    else:
-        try:
-            client.users.get(user_id)
-        except NotFoundError:
-            return "mit DELETE (API v1) vollständig gelöscht"
-        refused = "DELETE (API v1) ohne Fehler, aber der User ist noch abrufbar"
+        outcome = f"DELETE (API v1) abgewiesen (HTTP {error.status_code}, {error.problem_type}: {error.detail})"
+    if not _user_exists(client, user_id):
+        return f"{outcome}, per API v2 nicht mehr abrufbar: vollständig gelöscht"
     client._transport.request("POST", f"{path}/softDelete", json_body={})
-    return f"{refused}; per softDelete entfernt, ein Rest bleibt in weclapp"
+    return f"{outcome}, der User war noch vorhanden; per softDelete entfernt, ein Rest bleibt in weclapp"
 
 
 def test_remove_test_records(client: WeclappClient, v1_transport: HttpTransport, report: IntegrationReport) -> None:
