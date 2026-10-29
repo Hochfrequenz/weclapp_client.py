@@ -6,6 +6,7 @@
   "employeeNumber": "1001",
   "userId": "4711",
   "birthDate": 482112000000,
+  "entryDate": 1585699200000,
   "employmentStatus": "ACTIVE",
   "privateAddress": { "city": "Musterstadt", "countryCode": "DE" },
   "workingTimeRuleAssignments": []

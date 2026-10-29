@@ -54,7 +54,9 @@ with WeclappClient(WeclappConfig.from_env()) as client:
         )
     employee = client.employees.for_user(user.id)
     if employee is None:
-        client.employees.create(EmployeeCreate(user_id=user.id, birth_date=date(1985, 4, 12)))
+        client.employees.create(
+            EmployeeCreate(user_id=user.id, birth_date=date(1985, 4, 12), entry_date=date(2026, 11, 1))
+        )
     elif employee.birth_date != date(1985, 4, 12):
         client.employees.update(employee, EmployeeUpdate(birth_date=date(1985, 4, 12)))
 ```
@@ -81,7 +83,7 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - **No personal data in logs:** the logger `weclapp_client` only logs method, path and status. The API token never
   appears in logs, `repr` or exceptions.
 - Unknown properties in responses are ignored, unknown enum values are kept as strings.
-- Date-only fields (e.g. `birth_date`) are written as midnight UTC; when reading, timestamps are rounded to the
+- Date-only fields (`birth_date`, `entry_date`) are written as midnight UTC; when reading, timestamps are rounded to the
   nearest midnight, so dates stored at local midnight (e.g. Europe/Berlin) are read correctly.
 
 ### Exceptions

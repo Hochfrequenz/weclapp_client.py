@@ -31,6 +31,7 @@ pytestmark = pytest.mark.integration_write
 
 _BIRTH_DATE = date(1950, 1, 1)
 """before 1970, so negative timestamps are covered as well"""
+_ENTRY_DATE = date(2020, 4, 1)
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,7 @@ def records_fixture(
         )
     )
     cleanup.add_user(user.id)
-    employee = client.employees.create(EmployeeCreate(user_id=user.id, birth_date=_BIRTH_DATE))
+    employee = client.employees.create(EmployeeCreate(user_id=user.id, birth_date=_BIRTH_DATE, entry_date=_ENTRY_DATE))
     cleanup.add_employee(employee.id)
     report.manual(f"P2: im Test-Postfach prüfen, ob für {email} eine Mail angekommen ist")
     report.manual(f"P3: Personalakte {employee.id} in der Oberfläche öffnen und prüfen, ob sie nutzbar ist")
@@ -87,12 +88,13 @@ def test_user_is_created_as_not_active(records: _TestRecords, report: Integratio
     report.finding("P4", f"username {convention}")
 
 
-def test_employee_is_created_with_birth_date(
+def test_employee_is_created_with_birth_and_entry_date(
     client: WeclappClient, records: _TestRecords, report: IntegrationReport
 ) -> None:
     employee = client.employees.get(records.employee.id)
     assert employee.user_id == records.user.id
     assert employee.birth_date == _BIRTH_DATE
+    assert employee.entry_date == _ENTRY_DATE
     raw = client._transport.request_json("GET", entity_path("employee", employee.id))
     offset_hours = (raw["birthDate"] % 86_400_000) / 3_600_000
     report.finding("P3", f"Personalakte für NOT_ACTIVE-User angelegt, employeeNumber {employee.employee_number!r}")

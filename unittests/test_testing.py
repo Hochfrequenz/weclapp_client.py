@@ -78,6 +78,18 @@ def test_create_employee_assigns_employee_number(fake: FakeWeclapp, client: Wecl
     assert client.employees.for_user(user.id) == first
 
 
+def test_employee_entry_date_round_trip(fake: FakeWeclapp, client: WeclappClient) -> None:
+    created = client.employees.create(
+        EmployeeCreate(user_id=fake.add_user(email="a@example.com").id, entry_date=date(2026, 11, 1))
+    )
+    added = fake.add_employee(user_id=fake.add_user(email="b@example.com").id, entry_date=date(2020, 4, 1))
+
+    assert created.entry_date == date(2026, 11, 1)
+    assert client.employees.get(created.id) == created
+    assert client.employees.get(added.id).entry_date == date(2020, 4, 1)
+    assert [employee.entry_date for employee in fake.employees] == [date(2026, 11, 1), date(2020, 4, 1)]
+
+
 def test_current_user_is_not_part_of_users(fake: FakeWeclapp, client: WeclappClient) -> None:
     assert client.users.current().username == "api-user@example.com"
     assert fake.users == []

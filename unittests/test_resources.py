@@ -114,9 +114,12 @@ def test_employee_filters_include_properties_of_the_linked_user() -> None:
 
 def test_create_employee() -> None:
     router = _Router({"employee": _json(load_fixture("employee"), status=201)})
-    employee = _client(router).employees.create(EmployeeCreate(user_id="4711", birth_date=date(1985, 4, 12)))
+    employee = _client(router).employees.create(
+        EmployeeCreate(user_id="4711", birth_date=date(1985, 4, 12), entry_date=date(2020, 4, 1))
+    )
     assert employee.employee_number == "1001"
-    assert router.requests[0].content == b'{"userId":"4711","birthDate":482112000000}'
+    assert employee.entry_date == date(2020, 4, 1)
+    assert router.requests[0].content == b'{"userId":"4711","birthDate":482112000000,"entryDate":1585699200000}'
 
 
 # ----------------------------------------------------------------------------------------------------------------------

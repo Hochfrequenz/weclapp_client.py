@@ -354,13 +354,24 @@ class FakeWeclapp:
         data.update({to_camel(name): value for name, value in properties.items()})
         return User.model_validate(self._render(self._insert("user", data)))
 
-    def add_employee(self, *, user_id: str, birth_date: date | None = None, **properties: Any) -> Employee:
+    def add_employee(
+        self,
+        *,
+        user_id: str,
+        birth_date: date | None = None,
+        entry_date: date | None = None,
+        **properties: Any,
+    ) -> Employee:
         """
         Adds an employee without validation.
 
         :param properties: further properties in snake_case, e.g. ``employment_status="ACTIVE"``
         """
-        data: dict[str, Any] = {"userId": user_id, "birthDate": date_to_ms(birth_date) if birth_date else None}
+        data: dict[str, Any] = {
+            "userId": user_id,
+            "birthDate": date_to_ms(birth_date) if birth_date else None,
+            "entryDate": date_to_ms(entry_date) if entry_date else None,
+        }
         data.update({to_camel(name): value for name, value in properties.items()})
         return Employee.model_validate(self._render(self._insert("employee", data)))
 

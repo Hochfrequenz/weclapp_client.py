@@ -71,6 +71,7 @@ def test_employee_is_parsed() -> None:
     assert employee.employee_number == "1001"
     assert employee.user_id == "4711"
     assert employee.birth_date == date(1985, 4, 12)
+    assert employee.entry_date == date(2020, 4, 1)
     assert employee.employment_status is EmploymentStatus.ACTIVE
 
 
@@ -165,6 +166,10 @@ def test_employee_create_payload() -> None:
     assert EmployeeCreate(user_id="4711", birth_date=date(1985, 4, 12)).to_payload() == {
         "userId": "4711",
         "birthDate": 482112000000,
+    }
+    assert EmployeeCreate(user_id="4711", entry_date=date(2020, 4, 1)).to_payload() == {
+        "userId": "4711",
+        "entryDate": 1585699200000,
     }
     assert EmployeeCreate(user_id="4711").to_payload() == {"userId": "4711"}
 
