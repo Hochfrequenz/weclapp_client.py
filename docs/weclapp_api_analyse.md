@@ -107,7 +107,8 @@ b), können wir später zusätzlich oder stattdessen die echte `employeeNumber` 
   als Mitternacht UTC. ⚠ verifizieren, dass die weclapp-Oberfläche nicht den Vortag
   anzeigt, weil sie in eine andere Zeitzone umrechnet. Teilweise geprüft (P5): Die
   Oberfläche selbst speichert reine Datumsfelder als Mitternacht deutscher Zeit, und solche
-  Werte liest der Client richtig. Wie sie einen vom Client geschriebenen Wert anzeigt, klärt
+  Werte liest der Client am selben Tag, den die Oberfläche zeigt (✅ am Eintrittsdatum
+  verglichen). Wie die Oberfläche einen vom Client geschriebenen Wert anzeigt, klärt
   der Anlegetest.
 - **Namenslänge:** `firstName` und `lastName` dürfen höchstens 50 Zeichen lang sein. Längere
   Namen führen zu einem Validierungsfehler, den wir sauber melden müssen.
@@ -303,7 +304,7 @@ dem Tenant.
 | P2 | Ein Dry-Run mit `status=NOT_ACTIVE` wird akzeptiert. Ob `POST /user` eine Mail verschickt, zeigt erst ein echter Anlegetest. | offen |
 | P3 | Personalakten gibt es im Tenant nur für User mit `ACTIVE` oder `DEPARTURE`. Für `ACTIVE`, wie es das Sync-Repo nutzt, ist das der Normalfall. | für `NOT_ACTIVE` offen, für das Sync-Repo nicht mehr nötig |
 | P4 | **`username` lässt sich nicht setzen:** Einen Dry-Run von `POST /user` mit `username` weist weclapp mit 400 ab („property username is read-only“, `platform.read_only_property`). `username` ist bei fast allen Usern gleich der E-Mail-Adresse. Bei einigen ist es eine andere E-Mail-Adresse (vermutlich wurde die E-Mail später geändert) oder ein Name ohne `@`. **weclapp prüft die E-Mail nicht auf Eindeutigkeit:** Im Tenant gibt es E-Mail-Adressen in gleicher Schreibweise bei mehreren Usern, auch bei aktiven. Dry-Runs mit einer vorhandenen E-Mail werden akzeptiert, in gleicher wie in anderer Groß-/Kleinschreibung. | `FakeWeclapp` akzeptiert jetzt doppelte E-Mail-Adressen. Eine Suche per E-Mail kann mehrere User liefern, `find_one()` meldet dann `AmbiguousResultError`. Das Sync-Repo prüft Dubletten selbst. Den `username` braucht das Sync-Repo nicht. Ob weclapp ihn bei per API angelegten Usern auf die E-Mail-Adresse setzt, zeigt der Anlegetest |
-| P5 | Im Tenant haben die Personalakten kein Geburtsdatum und fast nie ein Eintrittsdatum. Das einzige vorhandene `entryDate` liegt auf Mitternacht deutscher Sommerzeit (22:00 UTC am Vortag). So speichert es die Oberfläche. | Der Client liest solche Werte durch das Runden richtig. Offen ist, wie die Oberfläche einen vom Client geschriebenen Wert anzeigt (Anlegetest) |
+| P5 | Im Tenant haben die Personalakten kein Geburtsdatum und fast nie ein Eintrittsdatum. Das einzige vorhandene `entryDate` liegt auf Mitternacht deutscher Sommerzeit (22:00 UTC am Vortag). So speichert es die Oberfläche. Der Client liest es am selben Tag, den die Oberfläche zeigt (✅ manuell verglichen). Ohne das Runden käme der Vortag heraus. | Lesen ist geprüft. Offen ist, wie die Oberfläche einen vom Client geschriebenen Wert anzeigt (Anlegetest) |
 | P6 | `properties=customAttributes` und der Filter `customAttribute<id>-eq` funktionieren. Den Key des Attributs „Personalnummer“ hat weclapp selbst vergeben, eine zufällige Zeichenfolge statt `personalnummer`. | Das Attribut über seine ID auflösen, wie im Sync-Repo. Die Integrationstests nehmen dafür `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID` |
 | P7 | `PUT /user?ignoreMissingProperties=true` (Dry-Run) behält nicht gesendete Felder und führt `customAttributes` pro Attribut zusammen. | wie in Client und Fake umgesetzt. `PUT /employee` folgt mit dem Anlegetest |
 | P8 | Paging mit `pageSize=1000` und `sort=id` liefert bei `/user` und `/employee` jede Entität genau einmal, passend zu `count`. | keine |
