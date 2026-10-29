@@ -202,6 +202,12 @@ def test_custom_attribute_definitions(populated: FakeWeclapp) -> None:
     assert definition == populated.custom_attribute_definitions[0]
 
 
+def test_custom_attribute_definition_names_its_entity_like_weclapp(populated: FakeWeclapp) -> None:
+    definition = populated.client().custom_attribute_definitions.get(populated.custom_attribute_definitions[0].id)
+    assert definition.entities == ["user"]
+    assert definition.attribute_entity_type is None
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # updates
 

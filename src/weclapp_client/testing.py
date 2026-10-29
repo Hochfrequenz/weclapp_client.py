@@ -383,14 +383,16 @@ class FakeWeclapp:
         label: str | None = None,
         entity: str = "user",
     ) -> CustomAttributeDefinition:
-        """Adds the definition of a custom attribute (by default of type ``STRING`` for users)."""
+        """
+        Adds the definition of a custom attribute (by default of type ``STRING`` for users). Like weclapp, it leaves
+        ``attributeEntityType`` empty: weclapp only sets it for attributes that reference another entity.
+        """
         data = {
             "attributeKey": attribute_key,
             "attributeType": str(attribute_type),
             "label": label or attribute_key,
             "active": True,
             "mandatory": False,
-            "attributeEntityType": entity,
             "entities": [entity],
         }
         stored = self._insert("customAttributeDefinition", data)

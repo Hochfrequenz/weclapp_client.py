@@ -85,6 +85,7 @@ def test_custom_attribute_definition_is_parsed() -> None:
     assert definition.attribute_key == "personalnummer"
     assert definition.attribute_type is CustomAttributeType.STRING
     assert definition.entities == ["user"]
+    assert definition.attribute_entity_type is None
 
 
 def test_python_dump_keeps_python_types() -> None:

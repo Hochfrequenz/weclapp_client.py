@@ -52,4 +52,6 @@ class CustomAttributeDefinition(WeclappEntity):
     label: str | None = None
     active: bool | None = None
     attribute_entity_type: str | None = None
+    """for attributes of type ``ENTITY``: the type of the referenced entity (e.g. ``party``); empty otherwise"""
     entities: list[str] = Field(default_factory=list)
+    """the entities the attribute belongs to, e.g. ``["user"]``"""
