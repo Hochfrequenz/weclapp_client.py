@@ -11,12 +11,12 @@ The fake implements ``/user``, ``/employee``, ``/customAttributeDefinition`` and
   filters on unknown properties
 - partial updates (``ignoreMissingProperties=true``) merge ``customAttributes`` per attribute; a stale ``version``
   is answered with ``409 optimistic_lock``
-- validation: missing required properties, read-only or unknown properties, duplicate e-mail addresses, a second
-  employee for the same user and references to unknown users are answered with ``400``
+- validation: missing required properties, read-only or unknown properties, a second employee for the same user and
+  references to unknown users are answered with ``400``
 - ``dryRun=true`` validates without storing and answers without meta properties
 
-Some rules are assumptions until they are verified against a real tenant (see the implementation plan, AP 6):
-e-mail addresses are unique (case-insensitive) and every user has at most one employee.
+Like weclapp, the fake accepts several users with the same e-mail address; every user has at most one employee
+(both observed in a real tenant, see the API analysis).
 
 Example::
 
@@ -652,14 +652,11 @@ class FakeWeclapp:
         if resource == "user":
             if entity.get("status") and entity["status"] not in {status.value for status in UserStatus}:
                 issues.append(_issue("status", "enum", "unsupported value"))
-            email = str(entity.get("email") or "").lower()
-            if email and any(str(other.get("email") or "").lower() == email for other in others):
-                issues.append(_issue("email", "duplicate", "a user with this e-mail address already exists"))
         if resource == "employee" and entity.get("userId"):
             if entity["userId"] not in self._store["user"]:
                 issues.append(_issue("userId", "reference", "referenced entity not found"))
             elif any(other.get("userId") == entity["userId"] for other in others):
-                issues.append(_issue("userId", "duplicate", "the user already has an employee record"))
+                issues.append(_issue("userId", "consistency", "the user already has an employee record"))
         return issues
 
     # ------------------------------------------------------------------------------------------------------------------

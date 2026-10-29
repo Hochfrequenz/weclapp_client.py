@@ -165,21 +165,6 @@ def test_second_employee_for_the_same_user(
     pytest.fail("weclapp allows several employees per user, the fake assumes the opposite")
 
 
-@pytest.mark.parametrize("variant", ["same", "swapped_case"])
-def test_duplicate_email_is_rejected(
-    client: WeclappClient, records: _TestRecords, cleanup: Cleanup, report: IntegrationReport, variant: str
-) -> None:
-    email = records.email if variant == "same" else records.email.swapcase()
-    try:
-        duplicate = client.users.create(UserCreate(email=email, status=UserStatus.NOT_ACTIVE, last_name=TEST_LAST_NAME))
-    except WeclappValidationError:
-        report.finding("P4", f"doppelte E-Mail ({variant}) wird abgewiesen (wie im Fake angenommen)")
-        return
-    cleanup.add_user(duplicate.id)
-    report.finding("P4", f"ACHTUNG: doppelte E-Mail ({variant}) ist möglich, FakeWeclapp anpassen")
-    pytest.fail("weclapp accepts a duplicate e-mail address, the fake assumes the opposite")
-
-
 def test_dry_run_create_stores_nothing(
     client: WeclappClient, new_email: Callable[[], str], report: IntegrationReport
 ) -> None:
