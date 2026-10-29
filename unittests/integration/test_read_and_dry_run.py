@@ -39,7 +39,12 @@ def _rejection(call: Callable[[], object]) -> str:
     try:
         call()
     except WeclappValidationError as error:
-        issue_types = sorted({issue.type or "?" for issue in error.validation_errors})
+        issue_types = sorted(
+            {
+                f"{issue.type or '?'} ({issue.error_code})" if issue.error_code else issue.type or "?"
+                for issue in error.validation_errors
+            }
+        )
         return f"abgewiesen (400, validationErrors: {', '.join(issue_types) or 'keine'})"
     except WeclappApiError as error:
         return f"abgewiesen (HTTP {error.status_code}, {error.problem_type})"
@@ -231,6 +236,15 @@ def test_dry_run_create_minimal_user(
     minimal = {"email": new_email(), "status": "NOT_ACTIVE", "lastName": TEST_LAST_NAME}
     outcome = _rejection(lambda: _raw(client, "POST", "user", [("dryRun", "true")], minimal))
     report.finding("P1", f"Dry-Run ohne canEditDashboard: {outcome}")
+
+
+def test_dry_run_username_cannot_be_set(
+    client: WeclappClient, report: IntegrationReport, new_email: Callable[[], str], verified_dry_run: None
+) -> None:
+    email = new_email()
+    body = {"email": email, "status": "NOT_ACTIVE", "lastName": TEST_LAST_NAME, "username": email}
+    outcome = _rejection(lambda: _raw(client, "POST", "user", [("dryRun", "true")], body))
+    report.finding("P4", f"Dry-Run mit username gleich der E-Mail-Adresse: {outcome}")
 
 
 def test_dry_run_user_without_email_is_rejected(client: WeclappClient, report: IntegrationReport) -> None:
