@@ -401,8 +401,16 @@ def test_dry_run_with_stale_version(client: WeclappClient, report: IntegrationRe
 # mobile phone number (P12) and the values of list attributes (P13); phone numbers are only reported by their shape
 
 
+_PHONE_NUMBER_CHARACTERS = re.compile(r"[0-9+()/. -]*")
+
+
 def _shape(phone_number: str) -> str:
-    """the form of a phone number without its digits, e.g. ``+99 999 99999999``"""
+    """
+    The form of a phone number without its digits, e.g. ``+99 999 99999999``. weclapp accepts any text here, so
+    anything but digits and the usual separators is only reported as a placeholder.
+    """
+    if not _PHONE_NUMBER_CHARACTERS.fullmatch(phone_number):
+        return "anderes Format"
     return re.sub(r"[0-9]", "9", phone_number)
 
 
