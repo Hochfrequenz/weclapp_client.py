@@ -6,6 +6,7 @@ does not necessarily run all checks of a real request. The write tests (tier 2) 
 """
 
 import itertools
+import re
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from datetime import date, timedelta
@@ -16,7 +17,15 @@ import pytest
 from weclapp_client import Filter, NotFoundError, WeclappApiError, WeclappClient, WeclappValidationError
 from weclapp_client._converters import date_to_ms, ms_to_date
 from weclapp_client._http import entity_path
-from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, User, UserCreate, UserStatus
+from weclapp_client.models import (
+    CustomAttribute,
+    CustomAttributeDefinition,
+    CustomAttributeType,
+    EmployeeCreate,
+    User,
+    UserCreate,
+    UserStatus,
+)
 
 from .conftest import TEST_LAST_NAME, Cleanup, IntegrationReport
 
@@ -386,3 +395,87 @@ def test_dry_run_with_stale_version(client: WeclappClient, report: IntegrationRe
     params = [("ignoreMissingProperties", "true"), ("dryRun", "true")]
     outcome = _rejection(lambda: _raw(client, "PUT", entity_path("user", me.id), params, body))
     report.finding("P10", f"Dry-Run mit veralteter version: {outcome}")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# mobile phone number (P12) and the values of list attributes (P13); phone numbers are only reported by their shape
+
+
+def _shape(phone_number: str) -> str:
+    """the form of a phone number without its digits, e.g. ``+99 999 99999999``"""
+    return re.sub(r"[0-9]", "9", phone_number)
+
+
+def test_existing_mobile_phone_numbers(client: WeclappClient, report: IntegrationReport) -> None:
+    users = client.users.iterate(Filter.not_null("mobilePhoneNumber"), properties=["mobilePhoneNumber"])
+    shapes = Counter(_shape(user.mobile_phone_number) for user in users if user.mobile_phone_number)
+    summary = ", ".join(f"{shape}: {count}" for shape, count in shapes.most_common(5)) or "keine"
+    report.finding("P12", f"Formen von mobilePhoneNumber bestehender User ({shapes.total()}): {summary}")
+
+
+def test_dry_run_mobile_phone_number(
+    client: WeclappClient, report: IntegrationReport, new_email: Callable[[], str], verified_dry_run: None
+) -> None:
+    number = "+49 151 12345678"
+    data = UserCreate(
+        email=new_email(), status=UserStatus.NOT_ACTIVE, last_name=TEST_LAST_NAME, mobile_phone_number=number
+    )
+    answer = _raw(client, "POST", "user", [("dryRun", "true")], data.to_payload())
+    assert answer.get("mobilePhoneNumber") == number
+    report.finding("P12", "Dry-Run mit mobilePhoneNumber im Format +49 151 …: akzeptiert, unverändert zurückgegeben")
+
+    too_long = data.to_payload() | {"mobilePhoneNumber": "+49 " + "1" * 97}
+    outcome = _rejection(lambda: _raw(client, "POST", "user", [("dryRun", "true")], too_long))
+    assert outcome.startswith("abgewiesen")
+    report.finding("P12", f"Dry-Run mit 101 Zeichen: {outcome}")
+
+
+@pytest.fixture(name="list_definitions", scope="module")
+def list_definitions_fixture(client: WeclappClient) -> list[CustomAttributeDefinition]:
+    return client.custom_attribute_definitions.list(Filter.eq("attributeType", CustomAttributeType.LIST))
+
+
+def test_selectable_values(report: IntegrationReport, list_definitions: list[CustomAttributeDefinition]) -> None:
+    values = [value for definition in list_definitions for value in definition.selectable_values]
+    assert all(value.id and value.value is not None for value in values)
+    first_positions = sorted(
+        {min(v.position_number or 0 for v in d.selectable_values) for d in list_definitions if d.selectable_values}
+    )
+    report.finding(
+        "P13",
+        f"{len(list_definitions)} LIST-Definitionen mit {len(values)} Auswahlwerten, alle mit id und value; "
+        f"positionNumber beginnt bei {', '.join(map(str, first_positions)) or '-'}",
+    )
+
+
+def test_dry_run_selected_value(
+    client: WeclappClient,
+    report: IntegrationReport,
+    new_email: Callable[[], str],
+    verified_dry_run: None,
+    list_definitions: list[CustomAttributeDefinition],
+) -> None:
+    definition = next((d for d in list_definitions if "user" in d.entities and d.selectable_values), None)
+    if definition is None:
+        pytest.skip("no list attribute with values for users")
+    foreign = next((v.id for d in list_definitions if d.id != definition.id for v in d.selectable_values), None)
+
+    def create(value_id: str) -> None:
+        attribute = CustomAttribute.of_selection(definition.id, value_id)
+        data = UserCreate(
+            email=new_email(), status=UserStatus.NOT_ACTIVE, last_name=TEST_LAST_NAME, custom_attributes=[attribute]
+        )
+        client.users.create(data, dry_run=True)
+
+    create(definition.selectable_values[0].id)
+    report.finding("P13", "Dry-Run mit einem Auswahlwert der Definition: akzeptiert")
+    for label, value_id in [("einer unbekannten id", "1"), ("dem Auswahlwert einer anderen Definition", foreign)]:
+        if value_id is None:
+            continue
+        with pytest.raises(WeclappValidationError) as error_info:
+            create(value_id)
+        error = error_info.value
+        detail = (error.detail or "").replace(value_id, "<id>")
+        report.finding(
+            "P13", f"Dry-Run mit {label}: abgewiesen ({detail}, {len(error.validation_errors)} validationErrors)"
+        )
