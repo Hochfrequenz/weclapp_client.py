@@ -20,8 +20,9 @@ as a dependency.
 
 ## Installation
 
-The first release is a pre-release (`0.1.0a1`), because the client has not been verified against a real weclapp tenant
-yet. pip and uv only install pre-releases if the version specifier names one:
+The releases are pre-releases (`0.1.0a1`, `0.1.0a2`, ...): the client has been checked against a real weclapp tenant
+with reads and dry runs, but creating records has not been tested there yet. pip and uv only install pre-releases if the
+version specifier names one:
 
 ```bash
 uv add "weclapp-client>=0.1.0a1,<0.2"
