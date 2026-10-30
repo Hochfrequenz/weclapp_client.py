@@ -11,7 +11,15 @@ from weclapp_client import (
     WeclappClient,
     WeclappError,
 )
-from weclapp_client.models import CustomAttribute, CustomAttributeType, EmployeeCreate, UserCreate, UserStatus
+from weclapp_client.models import (
+    CustomAttribute,
+    CustomAttributeType,
+    EmployeeCreate,
+    IdReference,
+    UserCreate,
+    UserStatus,
+    WorkScheduleProfileAssignment,
+)
 
 from .helpers import load_fixture, make_config
 
@@ -86,6 +94,24 @@ def test_create_user() -> None:
     assert router.requests[0].method == "POST"
 
 
+def test_create_user_with_licenses_roles_and_typed_attributes() -> None:
+    router = _Router({"user": _json(load_fixture("user"), status=201)})
+    _client(router).users.create(
+        UserCreate(
+            email="erika.musterfrau@example.com",
+            status=UserStatus.ACTIVE,
+            licenses=["WECLAPP_PROJECT"],
+            user_roles=[IdReference(id="9101")],
+            custom_attributes=[CustomAttribute.of_number("9003", 59), CustomAttribute.of_selection("9002", "5")],
+        )
+    )
+    assert router.requests[0].content == (
+        b'{"email":"erika.musterfrau@example.com","status":"ACTIVE","canEditDashboard":false,'
+        b'"licenses":["WECLAPP_PROJECT"],"userRoles":[{"id":"9101"}],"customAttributes":'
+        b'[{"attributeDefinitionId":"9003","numberValue":"59"},{"attributeDefinitionId":"9002","selectedValueId":"5"}]}'
+    )
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # employees
 
@@ -119,7 +145,19 @@ def test_create_employee() -> None:
     )
     assert employee.employee_number == "1001"
     assert employee.entry_date == date(2020, 4, 1)
-    assert router.requests[0].content == b'{"userId":"4711","birthDate":482112000000,"entryDate":1585699200000}'
+    assert router.requests[0].content == b'{"userId":"4711","birthDate":482104800000,"entryDate":1585692000000}'
+
+
+def test_create_employee_with_work_schedule_profile() -> None:
+    router = _Router({"employee": _json(load_fixture("employee"), status=201)})
+    assignment = WorkScheduleProfileAssignment(work_schedule_profile_id="5300", start_date=date(2020, 4, 1))
+    employee = _client(router).employees.create(
+        EmployeeCreate(user_id="4711", work_schedule_profile_assignments=[assignment])
+    )
+    assert employee.work_schedule_profile_assignments[0].start_date == date(2020, 4, 1)
+    assert router.requests[0].content == (
+        b'{"userId":"4711","workScheduleProfileAssignments":[{"workScheduleProfileId":"5300","startDate":1585692000000}]}'
+    )
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -161,3 +199,21 @@ def test_custom_attribute_definition_with_wrong_type() -> None:
         _client(_definitions_router()).custom_attribute_definitions.get_by_key(
             "abteilung", expected_type=CustomAttributeType.STRING
         )
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# work schedule profiles
+
+
+def test_list_work_schedule_profiles() -> None:
+    router = _Router({"workScheduleProfile": _json({"result": [load_fixture("work_schedule_profile")]})})
+    profiles = _client(router).work_schedule_profiles.list()
+    assert [(profile.id, profile.weekly_work_duration_in_minutes) for profile in profiles] == [("5300", 2400)]
+    assert router.requests[0].url.params["sort"] == "id"
+
+
+def test_work_schedule_profiles_are_filtered_by_known_properties() -> None:
+    profiles = _client(_Router({"workScheduleProfile": _json({"result": []})})).work_schedule_profiles
+    assert profiles.list(Filter.eq("weeklyWorkDurationInMinutes", 2400)) == []
+    with pytest.raises(InvalidQueryError):
+        profiles.list(Filter.eq("workScheduleDays", "x"))

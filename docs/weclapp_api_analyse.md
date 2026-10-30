@@ -103,12 +103,11 @@ b), können wir später zusätzlich oder stattdessen die echte `employeeNumber` 
 
 ### 3.3 Weitere Punkte
 
-- **Geburtsdatum:** Die API erwartet Millisekunden seit Epoch (UTC). Wir liefern das Datum
-  als Mitternacht UTC. ⚠ verifizieren, dass die weclapp-Oberfläche nicht den Vortag
-  anzeigt, weil sie in eine andere Zeitzone umrechnet. Teilweise geprüft (P5): Die
-  Oberfläche selbst speichert reine Datumsfelder als Mitternacht deutscher Zeit, und solche
-  Werte liest der Client richtig. Wie sie einen vom Client geschriebenen Wert anzeigt, klärt
-  der Anlegetest.
+- **Geburtsdatum:** Die API erwartet Millisekunden seit Epoch (UTC). ✅ Geklärt (P5): Die
+  Oberfläche speichert reine Datumsfelder als Mitternacht deutscher Zeit, und so schreibt sie
+  jetzt auch der Client. Beim Startdatum eines Arbeitszeitprofils verlangt weclapp das, eine
+  Mitternacht UTC lehnt es dort ab. Beim Lesen rundet der Client auf die nächste Mitternacht
+  und liest so den Tag, den die Oberfläche zeigt (✅ am Eintrittsdatum verglichen).
 - **Namenslänge:** `firstName` und `lastName` dürfen höchstens 50 Zeichen lang sein. Längere
   Namen führen zu einem Validierungsfehler, den wir sauber melden müssen.
 - **Datenschutz:** Das Geburtsdatum ist personenbezogen, gehört aber nicht zu den besonders
@@ -245,7 +244,7 @@ Attributes gibt es nur für den Entitätstyp `user`.
 | Filter | `<feld>-<op>=<wert>` (`eq, ne, lt, gt, le, ge, null, notnull, like, ilike, in, notin`, …), `or-`-Präfix, `filter=`-Ausdrücke (Beta). **Unbekannte Filter werden stillschweigend ignoriert!** | Filterfelder prüfen. Sonst liefert eine Suche nach einem User mit einem Tippfehler im Filter **alle** User, und der Code nimmt womöglich den ersten |
 | Feldauswahl | `properties=…`, `includeReferencedEntities=userId` | schlanke Abfragen |
 | Nulls | Null-Felder werden weggelassen, `serializeNulls=true` liefert sie mit. **Leere Strings gelten als `null`.** | beim Diffen `""` und `None` gleich behandeln |
-| Datum | ms seit Epoch (UTC) | `date` ↔ ms-Konverter |
+| Datum | ms seit Epoch (UTC). Reine Datumsfelder speichert die Oberfläche als Mitternacht deutscher Zeit, beim Startdatum eines Arbeitszeitprofils ist das Pflicht | `date` ↔ ms-Konverter, schreibt Mitternacht deutscher Zeit |
 | Update | `PUT` ersetzt standardmäßig das ganze Objekt. Mit `?ignoreMissingProperties=true` ändert es nur die gesendeten Felder. Listen werden dabei ersetzt (fehlende Einträge werden gelöscht), **`customAttributes` dagegen pro Attribut zusammengeführt** (nicht gesendete Attribute bleiben erhalten). Der Parameter ist allgemein dokumentiert, bei `PUT /user` und `PUT /employee` aber nicht in der Spec deklariert (✅ bei `PUT /user` geprüft, P7; `PUT /employee` folgt mit dem Anlegetest) | **immer** partielles Update plus `version`. Außer `customAttributes` keine Listen senden |
 | Read-only- und unbekannte Felder | Werden sie beim POST/PUT mitgeschickt, gibt es **HTTP 400**, bei Feldern ohne Berechtigung **403** | Serializer sendet nur bekannte, beschreibbare Felder |
 | Optimistic Locking | Stimmt die `version` nicht, kommt `409 optimistic_lock` | neu lesen, erneut versuchen |
@@ -300,21 +299,45 @@ dem Tenant.
 | Punkt | Befund | Folge |
 |---|---|---|
 | P1 | `POST /user` ohne `email` wird mit 400 abgewiesen, betroffen ist das Feld `email`. Ohne `canEditDashboard` wird ein Dry-Run akzeptiert, obwohl die Spec das Feld als Pflicht führt. Alle Personalakten im Tenant haben eine `userId`. | keine, `UserCreate` sendet `canEditDashboard` weiterhin |
-| P2 | Ein Dry-Run mit `status=NOT_ACTIVE` wird akzeptiert. Ob `POST /user` eine Mail verschickt, zeigt erst ein echter Anlegetest. | offen |
+| P2 | Ein Dry-Run mit `status=NOT_ACTIVE` wird akzeptiert. Laut Anleitung des weclapp-Admins (siehe unten) verschickt `POST /user` keine Einladungsmail. | per Auskunft geklärt, selbst geprüft wird es beim ersten echten Lauf |
 | P3 | Personalakten gibt es im Tenant nur für User mit `ACTIVE` oder `DEPARTURE`. Für `ACTIVE`, wie es das Sync-Repo nutzt, ist das der Normalfall. | für `NOT_ACTIVE` offen, für das Sync-Repo nicht mehr nötig |
 | P4 | **`username` lässt sich nicht setzen:** Einen Dry-Run von `POST /user` mit `username` weist weclapp mit 400 ab („property username is read-only“, `platform.read_only_property`). `username` ist bei fast allen Usern gleich der E-Mail-Adresse. Bei einigen ist es eine andere E-Mail-Adresse (vermutlich wurde die E-Mail später geändert) oder ein Name ohne `@`. **weclapp prüft die E-Mail nicht auf Eindeutigkeit:** Im Tenant gibt es E-Mail-Adressen in gleicher Schreibweise bei mehreren Usern, auch bei aktiven. Dry-Runs mit einer vorhandenen E-Mail werden akzeptiert, in gleicher wie in anderer Groß-/Kleinschreibung. | `FakeWeclapp` akzeptiert jetzt doppelte E-Mail-Adressen. Eine Suche per E-Mail kann mehrere User liefern, `find_one()` meldet dann `AmbiguousResultError`. Das Sync-Repo prüft Dubletten selbst. Den `username` braucht das Sync-Repo nicht. Ob weclapp ihn bei per API angelegten Usern auf die E-Mail-Adresse setzt, zeigt der Anlegetest |
-| P5 | Im Tenant haben die Personalakten kein Geburtsdatum und fast nie ein Eintrittsdatum. Das einzige vorhandene `entryDate` liegt auf Mitternacht deutscher Sommerzeit (22:00 UTC am Vortag). So speichert es die Oberfläche. | Der Client liest solche Werte durch das Runden richtig. Offen ist, wie die Oberfläche einen vom Client geschriebenen Wert anzeigt (Anlegetest) |
-| P6 | `properties=customAttributes` und der Filter `customAttribute<id>-eq` funktionieren. Den Key des Attributs „Personalnummer“ hat weclapp selbst vergeben, eine zufällige Zeichenfolge statt `personalnummer`. | Das Attribut über seine ID auflösen, wie im Sync-Repo. Die Integrationstests nehmen dafür `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID` |
-| P7 | `PUT /user?ignoreMissingProperties=true` (Dry-Run) behält nicht gesendete Felder und führt `customAttributes` pro Attribut zusammen. | wie in Client und Fake umgesetzt. `PUT /employee` folgt mit dem Anlegetest |
+| P5 | Im Tenant haben die Personalakten kein Geburtsdatum und fast nie ein Eintrittsdatum. Das einzige vorhandene `entryDate` liegt auf Mitternacht deutscher Sommerzeit (22:00 UTC am Vortag). So speichert es die Oberfläche. Der Client liest es am selben Tag, den die Oberfläche zeigt (✅ manuell verglichen). Ohne das Runden käme der Vortag heraus. **Das Eintrittsdatum steht in der Praxis im Arbeitszeitprofil:** Jede Personalakte hat genau ein Arbeitszeitprofil, dessen `startDate` auf Mitternacht deutscher Zeit liegt. Ein `startDate` auf Mitternacht UTC weist weclapp ab („startDate must be a date truncated to the start of the day“). `entryDate` und `birthDate` nimmt es in beiden Formen an. | Der Client schreibt reine Datumsfelder jetzt als Mitternacht deutscher Zeit, wie die Oberfläche. Lesen und Schreiben sind damit geprüft. Filter mit einem Datum treffen beide Formen: `eq`/`ne` werden zu `in`/`notin` mit beiden Zeitpunkten, Vergleiche nehmen den passenden (gegen den Tenant geprüft: `entryDate-in` findet den Wert und ist nicht wirkungslos) |
+| P6 | `properties=customAttributes` und der Filter `customAttribute<id>-eq` funktionieren. Den Key des Attributs „Personalnummer“ hat weclapp selbst vergeben, eine zufällige Zeichenfolge statt `personalnummer`. Zu welcher Entität ein Attribut gehört, steht nur in `entities` (hier `["user"]`). `attributeEntityType` ist bei allen Attributen leer außer bei denen vom Typ `ENTITY`, dort nennt es die referenzierte Entität (z. B. `party`). | Das Attribut über seine ID auflösen, wie im Sync-Repo. Die Integrationstests nehmen dafür `WECLAPP_IT_PERSONNEL_NUMBER_ATTRIBUTE_ID`. Ob es zu Usern gehört, über `entities` prüfen, nicht über `attributeEntityType`. `FakeWeclapp` lässt `attributeEntityType` jetzt ebenfalls leer |
+| P7 | `PUT /user?ignoreMissingProperties=true` (Dry-Run) behält nicht gesendete Felder und führt `customAttributes` pro Attribut zusammen. | wie in Client und Fake umgesetzt. `PUT /employee` braucht das Sync-Repo nicht, es legt nur an |
 | P8 | Paging mit `pageSize=1000` und `sort=id` liefert bei `/user` und `/employee` jede Entität genau einmal, passend zu `count`. | keine |
 | P9 | Der Token funktioniert. Es ist ein persönlicher Token, noch kein technischer API-User. | Die minimalen Rechte sind offen, sie sind die Grundlage für die Einrichtungsdoku |
 | P10 | 400: Problem-JSON vom Typ `validation` mit `validationErrors`. 401 bei ungültigem Token: `error` `unauthorized`, `detail` „no identity available“. 404: `not_found`. 409 bei veralteter `version`: `optimistic_lock`, auch im Dry-Run. | passt zum Fehler-Mapping des Clients |
 | P11 | Kein User hat mehr als eine Personalakte. Ein Dry-Run für eine zweite Personalakte wird mit 400 abgewiesen, `validationErrors` vom Typ `consistency`. | `FakeWeclapp` meldet den Fall jetzt ebenfalls als `consistency` |
 
-**Noch offen**, zu klären mit einem Anlegetest (ein User, eine Personalakte) und manuellen Prüfungen:
+**Noch offen**, zu klären mit dem ersten echten Lauf des Sync-Repos (ein User, eine Personalakte):
 
-- P2: Geht beim Anlegen eines Users eine Mail raus?
+- P2: selbst prüfen, dass keine Mail rausgeht
 - P4: Wie vergibt weclapp `username` bei einem per API angelegten User, z. B. in Kleinschreibung?
-- P5: Zeigt die Oberfläche ein vom Client geschriebenes Datum (Mitternacht UTC) am richtigen Tag an?
-- P7: `PUT /employee` mit `ignoreMissingProperties=true`, als Dry-Run am Testdatensatz
-- P9: minimale Rechte eines technischen API-Users
+- P9: minimale Rechte eines technischen API-Users. Laut Anleitung arbeitet die API mit dem Token eines Admin-Benutzers.
+
+`PUT /employee` (P7) braucht das Sync-Repo nicht, weil es nur anlegt.
+
+### 10.1 Anleitung des weclapp-Admins (30.10.2026)
+
+Der weclapp-Admin hat beschrieben, wie neue Mitarbeiter angelegt werden. So sind auch die bestehenden angelegt. Die
+Anleitung ist intern. Die IDs von Rollen, Zusatzfeldern, Listenwerten und Arbeitszeitprofilen stehen deshalb nicht
+hier. Die Struktur:
+
+1. Prüfen, ob es den User schon gibt (jede Projekt-Lizenz kostet).
+2. `POST /user` mit Name, E-Mail, `licenses`, `userRoles` (IDs) und `customAttributes` mit Text-, Zahl-
+   (`numberValue`) und Listenwerten (`selectedValueId`): Personalnummer, Kostensatz, Grund des Kostensatzes,
+   Urlaubsanspruch, Bundesland für die Feiertage und Stellenbezeichnung. Das Standardfeld `title` bleibt leer, weil
+   es sonst auf Rechnungen vor dem Namen steht. Die Anleitung nennt auch `username`, aber weclapp lehnt das Feld ab
+   (P4).
+3. `POST /employee` mit `userId` und genau einem Arbeitszeitprofil (`workScheduleProfileAssignments`). Dessen
+   `startDate` ist das Eintrittsdatum.
+4. Danach automatisch: Zuordnung zu den internen Projekten, der Kostensatz gilt für die Zeitbuchungen, Anmeldung im
+   Zeitportal mit dem Microsoft-Konto zur selben E-Mail-Adresse. Bei einem Austritt wird der User deaktiviert, nicht
+   gelöscht.
+
+Der Client deckt das ab: `UserCreate` mit `licenses` und `user_roles`, `CustomAttribute.of_number()` und
+`of_selection()`, `EmployeeCreate` mit `work_schedule_profile_assignments` sowie `client.work_schedule_profiles`.
+Geprüft per Dry-Run: Den User in genau dieser Form nimmt weclapp an, ebenso die Personalakte mit einem vom Client
+geschriebenen Startdatum. Was das für die Sync-Logik heißt, steht in
+[HR-Sync#17](https://github.com/Hochfrequenz/HR-Sync/issues/17).

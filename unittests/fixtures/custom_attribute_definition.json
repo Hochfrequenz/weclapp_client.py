@@ -6,6 +6,5 @@
   "label": "Personalnummer",
   "active": true,
   "mandatory": false,
-  "attributeEntityType": "user",
   "entities": ["user"]
 }

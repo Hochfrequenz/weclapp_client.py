@@ -7,7 +7,7 @@
 
 A typed Python client for the [weclapp REST API v2](https://www.weclapp.com/api/).
 It deliberately covers only the endpoints needed to synchronise employee master data into weclapp:
-`/user`, `/employee`, `/customAttributeDefinition` and `/user/currentUser`.
+`/user`, `/employee`, `/customAttributeDefinition`, `/workScheduleProfile` and `/user/currentUser`.
 
 The synchronisation logic itself (matching, diffing, reporting) lives in a separate repository that uses this package
 as a dependency.
@@ -20,8 +20,9 @@ as a dependency.
 
 ## Installation
 
-The first release is a pre-release (`0.1.0a1`), because the client has not been verified against a real weclapp tenant
-yet. pip and uv only install pre-releases if the version specifier names one:
+The releases are pre-releases (`0.1.0a1`, `0.1.0a2`, ...): the client has been checked against a real weclapp tenant
+with reads and dry runs, but creating records has not been tested there yet. pip and uv only install pre-releases if the
+version specifier names one:
 
 ```bash
 uv add "weclapp-client>=0.1.0a1,<0.2"
@@ -34,13 +35,26 @@ As long as the version is `0.x`, minor versions may contain breaking changes, so
 
 ```python
 from datetime import date
+from decimal import Decimal
 
 from weclapp_client import Filter, WeclappClient, WeclappConfig
-from weclapp_client.models import CustomAttribute, EmployeeCreate, EmployeeUpdate, UserCreate, UserStatus
+from weclapp_client.models import (
+    CustomAttribute,
+    EmployeeCreate,
+    IdReference,
+    UserCreate,
+    UserStatus,
+    WorkScheduleProfileAssignment,
+)
+
+# the ids of custom attributes, list values, user roles and work schedule profiles differ from tenant to tenant
+PERSONNEL_NUMBER_ATTRIBUTE_ID, COST_RATE_ATTRIBUTE_ID = "1001", "1002"
+STATE_ATTRIBUTE_ID, BAVARIA_VALUE_ID = "1003", "1004"
+TIME_TRACKING_ROLE_ID, FULL_TIME_PROFILE_ID = "1005", "1006"
 
 # reads WECLAPP_API_TOKEN and WECLAPP_BASE_URL (or WECLAPP_TENANT)
 with WeclappClient(WeclappConfig.from_env()) as client:
-    definition = client.custom_attribute_definitions.get_by_key("personalnummer")
+    definition = client.custom_attribute_definitions.get(PERSONNEL_NUMBER_ATTRIBUTE_ID)
     user = client.users.find_one(Filter.custom_attribute_eq(definition.id, "00042"))
     if user is None:
         user = client.users.create(
@@ -48,17 +62,19 @@ with WeclappClient(WeclappConfig.from_env()) as client:
                 email="erika.musterfrau@example.com",
                 first_name="Erika",
                 last_name="Musterfrau",
-                status=UserStatus.NOT_ACTIVE,
-                custom_attributes=[CustomAttribute.of_string(definition.id, "00042")],
+                status=UserStatus.ACTIVE,
+                licenses=["WECLAPP_PROJECT"],
+                user_roles=[IdReference(id=TIME_TRACKING_ROLE_ID)],
+                custom_attributes=[
+                    CustomAttribute.of_string(definition.id, "00042"),
+                    CustomAttribute.of_number(COST_RATE_ATTRIBUTE_ID, Decimal("59")),
+                    CustomAttribute.of_selection(STATE_ATTRIBUTE_ID, BAVARIA_VALUE_ID),
+                ],
             )
         )
-    employee = client.employees.for_user(user.id)
-    if employee is None:
-        client.employees.create(
-            EmployeeCreate(user_id=user.id, birth_date=date(1985, 4, 12), entry_date=date(2026, 11, 1))
-        )
-    elif employee.birth_date != date(1985, 4, 12):
-        client.employees.update(employee, EmployeeUpdate(birth_date=date(1985, 4, 12)))
+    if client.employees.for_user(user.id) is None:
+        full_time = WorkScheduleProfileAssignment(work_schedule_profile_id=FULL_TIME_PROFILE_ID, start_date=date(2026, 11, 1))
+        client.employees.create(EmployeeCreate(user_id=user.id, work_schedule_profile_assignments=[full_time]))
 ```
 
 - `iterate()`/`list()` page through all entities; `properties=[...]` loads only the given properties
@@ -69,6 +85,10 @@ with WeclappClient(WeclappConfig.from_env()) as client:
   is created in the user interface; in that case, load the definition by its id with `get()`.
 - `create()` and `update()` accept `dry_run=True`: weclapp validates the data without storing it, and the method
   returns `None` (weclapp does not assign ids in dry runs).
+- weclapp assigns the `username` of a user itself; it is read-only and usually equals the e-mail address.
+- The entry date of an employee is usually the start date of the first work schedule profile
+  (`Employee.work_schedule_profile_assignments`); `entry_date` is often empty. `client.work_schedule_profiles` lists
+  the profiles with their weekly working time, e.g. to check configured profile ids.
 - Read models (`User`, `Employee`, ...) guarantee `id` and `version`. Write models (`UserCreate`, `UserUpdate`, ...)
   only contain writable properties.
 
@@ -86,8 +106,11 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - **No personal data in logs:** the logger `weclapp_client` only logs method, path and status. The API token never
   appears in logs, `repr` or exceptions.
 - Unknown properties in responses are ignored, unknown enum values are kept as strings.
-- Date-only fields (`birth_date`, `entry_date`) are written as midnight UTC; when reading, timestamps are rounded to the
-  nearest midnight, so dates stored at local midnight (e.g. Europe/Berlin) are read correctly.
+- **Date-only fields** (`birth_date`, `entry_date`, the dates of work schedule profiles) are written as midnight
+  German time (Europe/Berlin), like the weclapp user interface stores them; weclapp rejects anything else as the start
+  date of a work schedule profile. When reading, timestamps are rounded to the nearest midnight, so dates stored as
+  midnight UTC are read correctly as well. Filters with a `date` (e.g. `Filter.eq("birthDate", date(1985, 4, 12))`)
+  match both forms.
 
 ### Exceptions
 
@@ -149,8 +172,9 @@ def test_timeout_while_creating_an_employee() -> None:
     ...
 ```
 
-- `add_user()`, `add_employee()` and `add_custom_attribute_definition()` arrange test data without validation, so
-  inconsistent states (e.g. duplicate personnel numbers) can be tested as well.
+- `add_user()`, `add_employee()`, `add_custom_attribute_definition()` and `add_work_schedule_profile()` arrange test
+  data without validation, so inconsistent states (e.g. duplicate personnel numbers) can be tested as well. Like
+  weclapp, the fake rejects employees with an unknown work schedule profile, so add the profiles your code uses.
 - `users`, `employees`, `requests` and `write_requests` show the state and the requests received.
 - `fail_next()` lets the next matching request fail with a status code or an exception.
 - Like weclapp, the fake accepts several users with the same e-mail address, so check for an existing user yourself

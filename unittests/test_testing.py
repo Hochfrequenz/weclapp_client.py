@@ -23,9 +23,11 @@ from weclapp_client.models import (
     CustomAttributeType,
     EmployeeCreate,
     EmployeeUpdate,
+    IdReference,
     UserCreate,
     UserStatus,
     UserUpdate,
+    WorkScheduleProfileAssignment,
 )
 from weclapp_client.testing import BASE_URL, DEFAULT_API_TOKEN, FakeWeclapp
 
@@ -88,6 +90,60 @@ def test_employee_entry_date_round_trip(fake: FakeWeclapp, client: WeclappClient
     assert client.employees.get(created.id) == created
     assert client.employees.get(added.id).entry_date == date(2020, 4, 1)
     assert [employee.entry_date for employee in fake.employees] == [date(2026, 11, 1), date(2020, 4, 1)]
+
+
+def test_date_filters_match_midnight_german_time_and_utc(fake: FakeWeclapp, client: WeclappClient) -> None:
+    # 1 April 2020 as stored by the user interface (midnight German time) and by version 0.1.0a1 (midnight UTC)
+    for email, entry_date in [("a@example.com", 1585692000000), ("b@example.com", 1585699200000)]:
+        body = {"userId": fake.add_user(email=email).id, "entryDate": entry_date}
+        assert _raw(fake, "POST", "employee", json=body).status_code == 201
+    day = date(2020, 4, 1)
+
+    assert client.employees.count(Filter.eq("entryDate", day)) == 2
+    assert client.employees.count(Filter.in_("entryDate", [day])) == 2
+    assert client.employees.count(Filter.le("entryDate", day)) == 2
+    assert client.employees.count(Filter.ge("entryDate", day)) == 2
+    assert client.employees.count(Filter.ne("entryDate", day)) == 0
+    assert client.employees.count(Filter.not_in("entryDate", [day])) == 0
+    assert client.employees.count(Filter.lt("entryDate", day)) == 0
+    assert client.employees.count(Filter.gt("entryDate", day)) == 0
+    assert client.employees.count(Filter.lt("entryDate", date(2020, 4, 2))) == 2
+    assert client.employees.count(Filter.gt("entryDate", date(2020, 3, 31))) == 2
+
+
+def test_user_with_licenses_roles_and_typed_attributes(fake: FakeWeclapp, client: WeclappClient) -> None:
+    created = client.users.create(
+        _new_user(
+            licenses=["WECLAPP_PROJECT"],
+            user_roles=[IdReference(id="9101")],
+            custom_attributes=[CustomAttribute.of_number("9003", "59"), CustomAttribute.of_selection("9002", "5")],
+        )
+    )
+
+    assert client.users.get(created.id) == created
+    assert created.licenses == ["WECLAPP_PROJECT"]
+    assert created.user_roles == [IdReference(id="9101")]
+    assert created.custom_attributes == [
+        CustomAttribute.of_number("9003", 59),
+        CustomAttribute.of_selection("9002", "5"),
+    ]
+
+
+def test_employee_with_work_schedule_profile(fake: FakeWeclapp, client: WeclappClient) -> None:
+    profile = fake.add_work_schedule_profile(name="Vollzeit 40h", weekly_work_duration_in_minutes=2400)
+    assignment = WorkScheduleProfileAssignment(work_schedule_profile_id=profile.id, start_date=date(2026, 11, 1))
+    created = client.employees.create(
+        EmployeeCreate(user_id=fake.add_user(email="a@example.com").id, work_schedule_profile_assignments=[assignment])
+    )
+    added = fake.add_employee(
+        user_id=fake.add_user(email="b@example.com").id, work_schedule_profile_assignments=[assignment]
+    )
+
+    assert client.work_schedule_profiles.list() == [profile] == fake.work_schedule_profiles
+    stored = client.employees.get(created.id).work_schedule_profile_assignments
+    assert [(item.work_schedule_profile_id, item.start_date) for item in stored] == [(profile.id, date(2026, 11, 1))]
+    assert stored[0].id is not None
+    assert added.work_schedule_profile_assignments[0].id not in {None, stored[0].id}
 
 
 def test_current_user_is_not_part_of_users(fake: FakeWeclapp, client: WeclappClient) -> None:
@@ -202,6 +258,12 @@ def test_custom_attribute_definitions(populated: FakeWeclapp) -> None:
     assert definition == populated.custom_attribute_definitions[0]
 
 
+def test_custom_attribute_definition_names_its_entity_like_weclapp(populated: FakeWeclapp) -> None:
+    definition = populated.client().custom_attribute_definitions.get(populated.custom_attribute_definitions[0].id)
+    assert definition.entities == ["user"]
+    assert definition.attribute_entity_type is None
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # updates
 
@@ -305,9 +367,37 @@ def test_user_can_have_only_one_employee(fake: FakeWeclapp, client: WeclappClien
     assert error_info.value.validation_errors[0].type == "consistency"
 
 
+def test_unknown_work_schedule_profile_is_rejected(fake: FakeWeclapp, client: WeclappClient) -> None:
+    assignment = WorkScheduleProfileAssignment(work_schedule_profile_id="4711", start_date=date(2026, 11, 1))
+    with pytest.raises(WeclappValidationError) as error_info:
+        client.employees.create(
+            EmployeeCreate(
+                user_id=fake.add_user(email="a@example.com").id, work_schedule_profile_assignments=[assignment]
+            )
+        )
+    issue = error_info.value.validation_errors[0]
+    assert (issue.location, issue.type) == ("workScheduleProfileAssignments[0].workScheduleProfileId", "reference")
+
+
 def test_custom_attribute_definitions_are_read_only_via_api(fake: FakeWeclapp) -> None:
     response = _raw(fake, "POST", "customAttributeDefinition", json={"attributeKey": "x", "attributeType": "STRING"})
     assert response.status_code == 405
+
+
+def test_work_schedule_profiles_are_read_only_via_api(fake: FakeWeclapp) -> None:
+    assert _raw(fake, "POST", "workScheduleProfile", json={"name": "x", "type": "USER"}).status_code == 405
+
+
+def test_start_date_must_be_midnight_german_time(fake: FakeWeclapp) -> None:
+    profile = fake.add_work_schedule_profile(name="Vollzeit 40h")
+    midnight_utc = 1_793_491_200_000  # 2026-11-01T00:00:00Z, i.e. 01:00 German time
+    assignment = {"workScheduleProfileId": profile.id, "startDate": midnight_utc}
+    body = {"userId": fake.add_user(email="a@example.com").id, "workScheduleProfileAssignments": [assignment]}
+
+    response = _raw(fake, "POST", "employee", json=body)
+
+    assert response.status_code == 400
+    assert "start of the day" in response.text
 
 
 def test_unknown_resource(fake: FakeWeclapp) -> None:

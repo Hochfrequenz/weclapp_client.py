@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -11,10 +12,13 @@ from weclapp_client.models import (
     EmployeeCreate,
     EmployeeUpdate,
     EmploymentStatus,
+    IdReference,
     User,
     UserCreate,
     UserStatus,
     UserUpdate,
+    WorkScheduleProfile,
+    WorkScheduleProfileAssignment,
 )
 
 from .helpers import load_fixture
@@ -39,10 +43,22 @@ def test_user_custom_attribute_lookup() -> None:
     personnel_number = user.custom_attribute("9001")
     assert personnel_number is not None
     assert personnel_number.string_value == "00042"
-    other = user.custom_attribute("9002")
-    assert other is not None
-    assert other.string_value is None
+    selection = user.custom_attribute("9002")
+    assert selection is not None
+    assert selection.string_value is None
+    assert selection.selected_value_id == "5"
+    number = user.custom_attribute("9003")
+    assert number is not None
+    assert number.number_value == Decimal("59.50")
+    unmodelled = user.custom_attribute("9004")
+    assert unmodelled == CustomAttribute(attribute_definition_id="9004")
     assert user.custom_attribute("does-not-exist") is None
+
+
+def test_user_licenses_and_roles_are_parsed() -> None:
+    user = User.model_validate(load_fixture("user"))
+    assert user.licenses == ["WECLAPP_PROJECT"]
+    assert user.user_roles == [IdReference(id="9101"), IdReference(id="9102")]
 
 
 def test_unknown_enum_values_are_kept_as_strings() -> None:
@@ -75,6 +91,21 @@ def test_employee_is_parsed() -> None:
     assert employee.employment_status is EmploymentStatus.ACTIVE
 
 
+def test_employee_work_schedule_profile_assignments_are_parsed() -> None:
+    employee = Employee.model_validate(load_fixture("employee"))
+    # stored at midnight German summer time, like the weclapp user interface does
+    assert employee.work_schedule_profile_assignments == [
+        WorkScheduleProfileAssignment(id="5200", work_schedule_profile_id="5300", start_date=date(2020, 4, 1))
+    ]
+
+
+def test_work_schedule_profile_is_parsed() -> None:
+    profile = WorkScheduleProfile.model_validate(load_fixture("work_schedule_profile"))
+    assert profile.name == "Vollzeit 40h"
+    assert profile.type == "USER"
+    assert profile.weekly_work_duration_in_minutes == 2400
+
+
 def test_employee_birth_date_before_1970() -> None:
     employee = Employee.model_validate({"id": "1", "version": "0", "birthDate": -631152000000})
     assert employee.birth_date == date(1950, 1, 1)
@@ -85,12 +116,13 @@ def test_custom_attribute_definition_is_parsed() -> None:
     assert definition.attribute_key == "personalnummer"
     assert definition.attribute_type is CustomAttributeType.STRING
     assert definition.entities == ["user"]
+    assert definition.attribute_entity_type is None
 
 
 def test_python_dump_keeps_python_types() -> None:
     employee = Employee.model_validate(load_fixture("employee"))
     assert employee.model_dump()["birthDate"] == date(1985, 4, 12)
-    assert employee.model_dump(mode="json")["birthDate"] == 482112000000
+    assert employee.model_dump(mode="json")["birthDate"] == 482104800000
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -110,6 +142,32 @@ def test_user_create_payload() -> None:
         "canEditDashboard": False,
         "firstName": "Erika",
         "customAttributes": [{"attributeDefinitionId": "9001", "stringValue": "00042"}],
+    }
+
+
+def test_user_create_payload_with_licenses_roles_and_typed_attributes() -> None:
+    data = UserCreate(
+        email="erika.musterfrau@example.com",
+        status=UserStatus.ACTIVE,
+        licenses=["WECLAPP_PROJECT"],
+        user_roles=[IdReference(id="9101")],
+        custom_attributes=[
+            CustomAttribute.of_number("9003", 59),
+            CustomAttribute.of_number("9005", "12.50"),
+            CustomAttribute.of_selection("9002", "5"),
+        ],
+    )
+    assert data.to_payload() == {
+        "email": "erika.musterfrau@example.com",
+        "status": "ACTIVE",
+        "canEditDashboard": False,
+        "licenses": ["WECLAPP_PROJECT"],
+        "userRoles": [{"id": "9101"}],
+        "customAttributes": [
+            {"attributeDefinitionId": "9003", "numberValue": "59"},
+            {"attributeDefinitionId": "9005", "numberValue": "12.50"},
+            {"attributeDefinitionId": "9002", "selectedValueId": "5"},
+        ],
     }
 
 
@@ -151,6 +209,16 @@ def test_user_update_with_custom_attribute() -> None:
     assert payload == {"customAttributes": [{"attributeDefinitionId": "9001", "stringValue": None}]}
 
 
+def test_clearing_a_typed_custom_attribute_sends_only_its_value() -> None:
+    changes = [CustomAttribute.of_number("9003", None), CustomAttribute.of_selection("9002", None)]
+    assert UserUpdate(custom_attributes=changes).to_payload() == {
+        "customAttributes": [
+            {"attributeDefinitionId": "9003", "numberValue": None},
+            {"attributeDefinitionId": "9002", "selectedValueId": None},
+        ]
+    }
+
+
 def test_write_models_reject_read_only_and_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         EmployeeUpdate.model_validate({"employeeNumber": "1001"})
@@ -165,13 +233,22 @@ def test_write_models_accept_api_property_names() -> None:
 def test_employee_create_payload() -> None:
     assert EmployeeCreate(user_id="4711", birth_date=date(1985, 4, 12)).to_payload() == {
         "userId": "4711",
-        "birthDate": 482112000000,
+        "birthDate": 482104800000,
     }
     assert EmployeeCreate(user_id="4711", entry_date=date(2020, 4, 1)).to_payload() == {
         "userId": "4711",
-        "entryDate": 1585699200000,
+        "entryDate": 1585692000000,
     }
     assert EmployeeCreate(user_id="4711").to_payload() == {"userId": "4711"}
+
+
+def test_employee_create_with_work_schedule_profile() -> None:
+    assignment = WorkScheduleProfileAssignment(work_schedule_profile_id="5300", start_date=date(2020, 4, 1))
+    data = EmployeeCreate(user_id="4711", work_schedule_profile_assignments=[assignment])
+    assert data.to_payload() == {
+        "userId": "4711",
+        "workScheduleProfileAssignments": [{"workScheduleProfileId": "5300", "startDate": 1585692000000}],
+    }
 
 
 def test_employee_create_requires_a_user() -> None:
@@ -180,7 +257,7 @@ def test_employee_create_requires_a_user() -> None:
 
 
 def test_employee_update_payload() -> None:
-    assert EmployeeUpdate(birth_date=date(1950, 1, 1)).to_payload() == {"birthDate": -631152000000}
+    assert EmployeeUpdate(birth_date=date(1950, 1, 1)).to_payload() == {"birthDate": -631155600000}
     assert EmployeeUpdate(birth_date=None).to_payload() == {"birthDate": None}
 
 

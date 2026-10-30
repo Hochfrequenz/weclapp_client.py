@@ -1,18 +1,24 @@
 """
 Conversion between the weclapp representation of dates (milliseconds since the Unix epoch) and Python objects.
 
+Date-only fields are written as midnight German time (Europe/Berlin), the way the weclapp user interface stores them.
+weclapp requires this for some fields, e.g. the start date of a work schedule profile, and accepts it for all others.
+
 The arithmetic uses ``timedelta`` instead of ``datetime.fromtimestamp``: birth dates before 1970 have negative
 timestamps, which ``fromtimestamp`` cannot handle on Windows.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from pydantic import BeforeValidator, PlainSerializer
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _ONE_MILLISECOND = timedelta(milliseconds=1)
 _HALF_DAY = timedelta(hours=12)
+_DATE_TIMEZONE = ZoneInfo("Europe/Berlin")
+"""the timezone in which weclapp stores date-only fields as midnight"""
 
 
 def ms_to_datetime(milliseconds: int) -> datetime:
@@ -39,8 +45,21 @@ def ms_to_date(milliseconds: int) -> date:
 
 
 def date_to_ms(value: date) -> int:
-    """Converts a ``date`` to the timestamp of midnight UTC of that day."""
-    return datetime_to_ms(datetime(value.year, value.month, value.day, tzinfo=UTC))
+    """Converts a ``date`` to the timestamp of midnight German time, i.e. 22:00 or 23:00 UTC of the day before."""
+    return datetime_to_ms(datetime(value.year, value.month, value.day, tzinfo=_DATE_TIMEZONE))
+
+
+def date_timestamps(value: date) -> tuple[int, int]:
+    """
+    The timestamps weclapp may hold for a date: midnight German time (the user interface and this client) and the later
+    midnight UTC (e.g. version ``0.1.0a1`` of this client). Date filters have to match both.
+    """
+    return date_to_ms(value), datetime_to_ms(datetime(value.year, value.month, value.day, tzinfo=UTC))
+
+
+def is_start_of_day(milliseconds: int) -> bool:
+    """Whether a timestamp is midnight German time, as weclapp requires it e.g. for the start of a work schedule."""
+    return ms_to_datetime(milliseconds).astimezone(_DATE_TIMEZONE).time() == time(0)
 
 
 def _parse_date(value: object) -> object:

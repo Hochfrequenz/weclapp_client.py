@@ -9,5 +9,8 @@
   "entryDate": 1585699200000,
   "employmentStatus": "ACTIVE",
   "privateAddress": { "city": "Musterstadt", "countryCode": "DE" },
-  "workingTimeRuleAssignments": []
+  "workingTimeRuleAssignments": [],
+  "workScheduleProfileAssignments": [
+    { "id": "5200", "version": "0", "workScheduleProfileId": "5300", "startDate": 1585692000000 }
+  ]
 }

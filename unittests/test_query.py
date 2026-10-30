@@ -14,7 +14,13 @@ from weclapp_client.query import Filter, validate_filters
         (Filter.eq("canEditDashboard", True), ("canEditDashboard-eq", "true")),
         (Filter.eq("canEditDashboard", False), ("canEditDashboard-eq", "false")),
         (Filter.ne("userId", 4711), ("userId-ne", "4711")),
-        (Filter.lt("birthDate", date(1970, 1, 2)), ("birthDate-lt", "86400000")),
+        (Filter.lt("birthDate", date(1970, 1, 2)), ("birthDate-lt", "82800000")),
+        (Filter.le("birthDate", date(1970, 1, 2)), ("birthDate-le", "86400000")),
+        (Filter.gt("birthDate", date(1970, 1, 2)), ("birthDate-gt", "86400000")),
+        (Filter.ge("birthDate", date(1970, 1, 2)), ("birthDate-ge", "82800000")),
+        (Filter.eq("birthDate", date(1970, 1, 2)), ("birthDate-in", "[82800000, 86400000]")),
+        (Filter.ne("birthDate", date(1970, 1, 2)), ("birthDate-notin", "[82800000, 86400000]")),
+        (Filter.eq("entryDate", date(2020, 4, 1)), ("entryDate-in", "[1585692000000, 1585699200000]")),
         (Filter.le("lastModifiedDate", datetime(1970, 1, 1, 0, 0, 1, tzinfo=UTC)), ("lastModifiedDate-le", "1000")),
         (Filter.gt("lastModifiedDate", 1700000000000), ("lastModifiedDate-gt", "1700000000000")),
         (Filter.ge("version", "2"), ("version-ge", "2")),
@@ -25,7 +31,7 @@ from weclapp_client.query import Filter, validate_filters
         (Filter.not_null("email"), ("email-notnull", "")),
         (Filter.in_("id", ["1", "2"]), ("id-in", '["1", "2"]')),
         (Filter.in_("status", [UserStatus.ACTIVE, UserStatus.NOT_ACTIVE]), ("status-in", '["ACTIVE", "NOT_ACTIVE"]')),
-        (Filter.not_in("birthDate", [date(1970, 1, 2), 5]), ("birthDate-notin", "[86400000, 5]")),
+        (Filter.not_in("birthDate", [date(1970, 1, 2), 5]), ("birthDate-notin", "[82800000, 86400000, 5]")),
         (Filter.custom_attribute_eq("9001", "00042"), ("customAttribute9001-eq", "00042")),
     ],
 )
@@ -42,6 +48,11 @@ def test_empty_property_names_are_rejected() -> None:
 def test_invalid_custom_attribute_ids_are_rejected(definition_id: str) -> None:
     with pytest.raises(InvalidQueryError):
         Filter.custom_attribute_eq(definition_id, "x")
+
+
+def test_dates_are_rejected_in_custom_attribute_filters() -> None:
+    with pytest.raises(InvalidQueryError):
+        Filter.custom_attribute_eq("9001", date(2020, 4, 1))
 
 
 def test_validate_filters_accepts_known_properties_and_custom_attributes() -> None:
