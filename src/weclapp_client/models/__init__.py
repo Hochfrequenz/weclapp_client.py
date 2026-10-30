@@ -9,7 +9,12 @@ from weclapp_client.models.base import (
     WeclappModel,
     WeclappUpdateModel,
 )
-from weclapp_client.models.custom_attribute import CustomAttribute, CustomAttributeDefinition, CustomAttributeType
+from weclapp_client.models.custom_attribute import (
+    CustomAttribute,
+    CustomAttributeDefinition,
+    CustomAttributeListValue,
+    CustomAttributeType,
+)
 from weclapp_client.models.employee import (
     Employee,
     EmployeeCreate,
@@ -23,6 +28,7 @@ from weclapp_client.models.work_schedule_profile import WorkScheduleProfile
 __all__ = [
     "CustomAttribute",
     "CustomAttributeDefinition",
+    "CustomAttributeListValue",
     "CustomAttributeType",
     "Employee",
     "EmployeeCreate",

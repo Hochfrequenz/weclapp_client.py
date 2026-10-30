@@ -13,6 +13,7 @@
   "licenses": ["WECLAPP_PROJECT"],
   "userRoles": [{ "id": "9101" }, { "id": "9102" }],
   "phoneNumber": "+49 000 0000000",
+  "mobilePhoneNumber": "+49 151 00000000",
   "customAttributes": [
     { "attributeDefinitionId": "9001", "stringValue": "00042" },
     { "attributeDefinitionId": "9002", "selectedValueId": "5" },

@@ -11,6 +11,7 @@ from weclapp_client.models.custom_attribute import CustomAttribute
 
 _NAME_MAX_LENGTH = 50
 _EMAIL_MAX_LENGTH = 256
+_PHONE_NUMBER_MAX_LENGTH = 100
 
 
 class UserStatus(StrEnum):
@@ -29,6 +30,7 @@ class User(WeclappEntity):
     email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
+    mobile_phone_number: str | None = None
     status: UserStatus | str | None = Field(default=None, union_mode="left_to_right")
     """a :class:`UserStatus`, or the raw value if weclapp introduces a new status"""
     can_edit_dashboard: bool | None = None
@@ -52,6 +54,8 @@ class UserCreate(WeclappCreateModel):
     can_edit_dashboard: bool = False
     first_name: str | None = Field(default=None, max_length=_NAME_MAX_LENGTH)
     last_name: str | None = Field(default=None, max_length=_NAME_MAX_LENGTH)
+    mobile_phone_number: str | None = Field(default=None, max_length=_PHONE_NUMBER_MAX_LENGTH)
+    """stored as sent, e.g. ``+49 151 12345678``; weclapp does not check or normalise the format"""
     licenses: list[str] | None = None
     """license codes, e.g. ``WECLAPP_PROJECT``; licenses may cost a fee"""
     user_roles: list[IdReference] | None = None
@@ -64,6 +68,7 @@ class UserUpdate(WeclappUpdateModel):
     email: str | None = Field(default=None, min_length=1, max_length=_EMAIL_MAX_LENGTH)
     first_name: str | None = Field(default=None, max_length=_NAME_MAX_LENGTH)
     last_name: str | None = Field(default=None, max_length=_NAME_MAX_LENGTH)
+    mobile_phone_number: str | None = Field(default=None, max_length=_PHONE_NUMBER_MAX_LENGTH)
     status: UserStatus | None = None
     custom_attributes: list[CustomAttribute] | None = None
     """only the attributes to change; weclapp keeps the values of all other custom attributes"""
