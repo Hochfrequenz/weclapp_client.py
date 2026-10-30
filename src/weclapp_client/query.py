@@ -13,35 +13,50 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 
-from weclapp_client._converters import date_to_ms, datetime_to_ms
+from weclapp_client._converters import date_timestamps, datetime_to_ms
 from weclapp_client.exceptions import InvalidQueryError
 
 FilterValue = str | int | float | bool | date | datetime | Enum
 """values that can be used in filters; dates and datetimes are converted to weclapp timestamps"""
 
+_JsonValue = str | int | float | bool
+
 _CUSTOM_ATTRIBUTE_ID_PATTERN = re.compile(r"^[0-9A-Za-z_]+$")
 
 
-def _json_value(value: FilterValue) -> str | int | float | bool:
+def _json_values(value: FilterValue) -> list[_JsonValue]:
+    """
+    Converts a filter value. A date becomes both timestamps weclapp may hold for it, the earlier one first; any other
+    value becomes a single value.
+    """
     if isinstance(value, Enum):
-        return _json_value(value.value)
+        return _json_values(value.value)
     if isinstance(value, datetime):
-        return datetime_to_ms(value)
+        return [datetime_to_ms(value)]
     if isinstance(value, date):
-        return date_to_ms(value)
-    return value
+        return list(date_timestamps(value))
+    return [value]
 
 
-def _param_value(value: FilterValue) -> str:
-    converted = _json_value(value)
-    if isinstance(converted, bool):
-        return "true" if converted else "false"
-    return str(converted)
+def _json_list(values: Iterable[FilterValue]) -> str:
+    return json.dumps([item for value in values for item in _json_values(value)])
+
+
+def _param_value(value: _JsonValue) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
 
 
 @dataclass(frozen=True)
 class Filter:
-    """A filter condition; create it with one of the class methods, e.g. ``Filter.eq("email", "a@example.com")``."""
+    """
+    A filter condition; create it with one of the class methods, e.g. ``Filter.eq("email", "a@example.com")``.
+
+    For date-only properties such as ``birthDate``, pass a ``date``. weclapp may hold midnight German time or midnight
+    UTC for a date, and the filters match both: ``eq`` and ``ne`` become ``in`` and ``notin`` with both timestamps,
+    and comparisons use the timestamp that includes or excludes the whole day.
+    """
 
     property_name: str
     """camelCase property name as used by weclapp, e.g. ``userId``"""
@@ -61,34 +76,40 @@ class Filter:
         return cls(property_name=property_name, operator=operator, value=value)
 
     @classmethod
+    def _matching(cls, property_name: str, operator: str, list_operator: str, values: list[_JsonValue]) -> "Filter":
+        if len(values) == 1:
+            return cls._create(property_name, operator, _param_value(values[0]))
+        return cls._create(property_name, list_operator, json.dumps(values))
+
+    @classmethod
     def eq(cls, property_name: str, value: FilterValue) -> "Filter":
         """property equals value"""
-        return cls._create(property_name, "eq", _param_value(value))
+        return cls._matching(property_name, "eq", "in", _json_values(value))
 
     @classmethod
     def ne(cls, property_name: str, value: FilterValue) -> "Filter":
         """property does not equal value"""
-        return cls._create(property_name, "ne", _param_value(value))
+        return cls._matching(property_name, "ne", "notin", _json_values(value))
 
     @classmethod
     def lt(cls, property_name: str, value: FilterValue) -> "Filter":
         """property is less than value"""
-        return cls._create(property_name, "lt", _param_value(value))
+        return cls._create(property_name, "lt", _param_value(_json_values(value)[0]))
 
     @classmethod
     def le(cls, property_name: str, value: FilterValue) -> "Filter":
         """property is less than or equal to value"""
-        return cls._create(property_name, "le", _param_value(value))
+        return cls._create(property_name, "le", _param_value(_json_values(value)[-1]))
 
     @classmethod
     def gt(cls, property_name: str, value: FilterValue) -> "Filter":
         """property is greater than value"""
-        return cls._create(property_name, "gt", _param_value(value))
+        return cls._create(property_name, "gt", _param_value(_json_values(value)[-1]))
 
     @classmethod
     def ge(cls, property_name: str, value: FilterValue) -> "Filter":
         """property is greater than or equal to value"""
-        return cls._create(property_name, "ge", _param_value(value))
+        return cls._create(property_name, "ge", _param_value(_json_values(value)[0]))
 
     @classmethod
     def like(cls, property_name: str, pattern: str) -> "Filter":
@@ -103,12 +124,12 @@ class Filter:
     @classmethod
     def in_(cls, property_name: str, values: Iterable[FilterValue]) -> "Filter":
         """property is one of the values"""
-        return cls._create(property_name, "in", json.dumps([_json_value(value) for value in values]))
+        return cls._create(property_name, "in", _json_list(values))
 
     @classmethod
     def not_in(cls, property_name: str, values: Iterable[FilterValue]) -> "Filter":
         """property is none of the values"""
-        return cls._create(property_name, "notin", json.dumps([_json_value(value) for value in values]))
+        return cls._create(property_name, "notin", _json_list(values))
 
     @classmethod
     def null(cls, property_name: str) -> "Filter":
@@ -125,10 +146,13 @@ class Filter:
         """the custom attribute with the given definition id has the value"""
         if not _CUSTOM_ATTRIBUTE_ID_PATTERN.fullmatch(definition_id):
             raise InvalidQueryError(f"Invalid custom attribute definition id: {definition_id!r}")
+        values = _json_values(value)
+        if len(values) != 1:
+            raise InvalidQueryError("Dates are not supported in filters on custom attributes")
         return cls(
             property_name=f"customAttribute{definition_id}",
             operator="eq",
-            value=_param_value(value),
+            value=_param_value(values[0]),
             is_custom_attribute=True,
         )
 

@@ -109,7 +109,8 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - **Date-only fields** (`birth_date`, `entry_date`, the dates of work schedule profiles) are written as midnight
   German time (Europe/Berlin), like the weclapp user interface stores them; weclapp rejects anything else as the start
   date of a work schedule profile. When reading, timestamps are rounded to the nearest midnight, so dates stored as
-  midnight UTC are read correctly as well.
+  midnight UTC are read correctly as well. Filters with a `date` (e.g. `Filter.eq("birthDate", date(1985, 4, 12))`)
+  match both forms.
 
 ### Exceptions
 

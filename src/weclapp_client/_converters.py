@@ -49,6 +49,14 @@ def date_to_ms(value: date) -> int:
     return datetime_to_ms(datetime(value.year, value.month, value.day, tzinfo=_DATE_TIMEZONE))
 
 
+def date_timestamps(value: date) -> tuple[int, int]:
+    """
+    The timestamps weclapp may hold for a date: midnight German time (the user interface and this client) and the later
+    midnight UTC (e.g. version ``0.1.0a1`` of this client). Date filters have to match both.
+    """
+    return date_to_ms(value), datetime_to_ms(datetime(value.year, value.month, value.day, tzinfo=UTC))
+
+
 def is_start_of_day(milliseconds: int) -> bool:
     """Whether a timestamp is midnight German time, as weclapp requires it e.g. for the start of a work schedule."""
     return ms_to_datetime(milliseconds).astimezone(_DATE_TIMEZONE).time() == time(0)

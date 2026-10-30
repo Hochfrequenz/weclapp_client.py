@@ -92,6 +92,25 @@ def test_employee_entry_date_round_trip(fake: FakeWeclapp, client: WeclappClient
     assert [employee.entry_date for employee in fake.employees] == [date(2026, 11, 1), date(2020, 4, 1)]
 
 
+def test_date_filters_match_midnight_german_time_and_utc(fake: FakeWeclapp, client: WeclappClient) -> None:
+    # 1 April 2020 as stored by the user interface (midnight German time) and by version 0.1.0a1 (midnight UTC)
+    for email, entry_date in [("a@example.com", 1585692000000), ("b@example.com", 1585699200000)]:
+        body = {"userId": fake.add_user(email=email).id, "entryDate": entry_date}
+        assert _raw(fake, "POST", "employee", json=body).status_code == 201
+    day = date(2020, 4, 1)
+
+    assert client.employees.count(Filter.eq("entryDate", day)) == 2
+    assert client.employees.count(Filter.in_("entryDate", [day])) == 2
+    assert client.employees.count(Filter.le("entryDate", day)) == 2
+    assert client.employees.count(Filter.ge("entryDate", day)) == 2
+    assert client.employees.count(Filter.ne("entryDate", day)) == 0
+    assert client.employees.count(Filter.not_in("entryDate", [day])) == 0
+    assert client.employees.count(Filter.lt("entryDate", day)) == 0
+    assert client.employees.count(Filter.gt("entryDate", day)) == 0
+    assert client.employees.count(Filter.lt("entryDate", date(2020, 4, 2))) == 2
+    assert client.employees.count(Filter.gt("entryDate", date(2020, 3, 31))) == 2
+
+
 def test_user_with_licenses_roles_and_typed_attributes(fake: FakeWeclapp, client: WeclappClient) -> None:
     created = client.users.create(
         _new_user(

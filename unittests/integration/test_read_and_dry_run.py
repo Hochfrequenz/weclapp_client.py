@@ -8,13 +8,13 @@ does not necessarily run all checks of a real request. The write tests (tier 2) 
 import itertools
 from collections import Counter, defaultdict
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
 
 from weclapp_client import Filter, NotFoundError, WeclappApiError, WeclappClient, WeclappValidationError
-from weclapp_client._converters import date_to_ms
+from weclapp_client._converters import date_to_ms, ms_to_date
 from weclapp_client._http import entity_path
 from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, User, UserCreate, UserStatus
 
@@ -138,6 +138,41 @@ def test_date_convention(client: WeclappClient, report: IntegrationReport, prope
     summary = ", ".join(f"{name}: {count}" for name, count in offsets.most_common())
     report.finding("P5", f"gespeicherte Werte von {property_name} ({sum(offsets.values())} geprüft): {summary}")
     report.manual(f"P5: für einen Employee das {label} in der Oberfläche mit dem Wert im Client vergleichen")
+
+
+@pytest.mark.parametrize("property_name", ["birthDate", "entryDate"])
+def test_date_filters(client: WeclappClient, report: IntegrationReport, property_name: str) -> None:
+    """Date filters find a record whatever time of day weclapp holds for the date (one record per time of day)."""
+    params = [
+        (f"{property_name}-notnull", ""),
+        ("properties", f"id,{property_name}"),
+        ("page", "1"),
+        ("pageSize", "200"),
+    ]
+    samples: dict[str, dict[str, Any]] = {}
+    for employee in _raw(client, "GET", "employee", params)["result"]:
+        if isinstance(employee.get(property_name), int):
+            samples.setdefault(_time_of_day(employee[property_name]), employee)
+    if not samples:
+        pytest.skip(f"no employee with {property_name}")
+    for time_of_day, employee in samples.items():
+        day = ms_to_date(employee[property_name])
+        same_employee = Filter.eq("id", employee["id"])
+        counts = {
+            name: client.employees.count(same_employee, condition)
+            for name, condition in [
+                ("eq", Filter.eq(property_name, day)),
+                ("le", Filter.le(property_name, day)),
+                ("ge", Filter.ge(property_name, day)),
+                ("ne", Filter.ne(property_name, day)),
+                ("lt", Filter.lt(property_name, day)),
+                ("gt", Filter.gt(property_name, day)),
+                ("eq next day", Filter.eq(property_name, day + timedelta(days=1))),
+            ]
+        }
+        expected = {"eq": 1, "le": 1, "ge": 1, "ne": 0, "lt": 0, "gt": 0, "eq next day": 0}
+        assert counts == expected, time_of_day
+    report.finding("P5", f"Datumsfilter auf {property_name} treffen gespeicherte Werte um {', '.join(samples)}")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
