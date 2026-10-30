@@ -6,7 +6,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from weclapp_client.models.base import WeclappCreateModel, WeclappEntity, WeclappUpdateModel
+from weclapp_client.models.base import IdReference, WeclappCreateModel, WeclappEntity, WeclappUpdateModel
 from weclapp_client.models.custom_attribute import CustomAttribute
 
 _NAME_MAX_LENGTH = 50
@@ -32,6 +32,8 @@ class User(WeclappEntity):
     status: UserStatus | str | None = Field(default=None, union_mode="left_to_right")
     """a :class:`UserStatus`, or the raw value if weclapp introduces a new status"""
     can_edit_dashboard: bool | None = None
+    licenses: list[str] = Field(default_factory=list)
+    user_roles: list[IdReference] = Field(default_factory=list)
     custom_attributes: list[CustomAttribute] = Field(default_factory=list)
 
     def custom_attribute(self, definition_id: str) -> CustomAttribute | None:
@@ -50,6 +52,9 @@ class UserCreate(WeclappCreateModel):
     can_edit_dashboard: bool = False
     first_name: str | None = Field(default=None, max_length=_NAME_MAX_LENGTH)
     last_name: str | None = Field(default=None, max_length=_NAME_MAX_LENGTH)
+    licenses: list[str] | None = None
+    """license codes, e.g. ``WECLAPP_PROJECT``; licenses may cost a fee"""
+    user_roles: list[IdReference] | None = None
     custom_attributes: list[CustomAttribute] | None = None
 
 

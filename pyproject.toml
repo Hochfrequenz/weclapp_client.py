@@ -20,7 +20,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 # lower bounds only (no pins): this is a library that is installed next to the dependencies of the sync repository
-dependencies = ["httpx>=0.28", "pydantic>=2.11"]
+# tzdata: the time zone database for zoneinfo, which Windows does not ship
+dependencies = ["httpx>=0.28", "pydantic>=2.11", "tzdata>=2024.1"]
 dynamic = ["readme", "version"]
 
 [project.urls]

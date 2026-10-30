@@ -1,18 +1,19 @@
 """
 In-memory fake of the weclapp endpoints used by this client, for tests without a weclapp tenant.
 
-The fake implements ``/user``, ``/employee``, ``/customAttributeDefinition`` and ``/user/currentUser`` as an
-``httpx.MockTransport`` and mimics the behaviour of the real API where it matters for synchronisation logic:
+The fake implements ``/user``, ``/employee``, ``/customAttributeDefinition``, ``/workScheduleProfile`` and
+``/user/currentUser`` as an ``httpx.MockTransport`` and mimics the behaviour of the real API where it matters for
+synchronisation logic:
 
-- ids, ``version`` (incremented with every change), ``createdDate``/``lastModifiedDate``, ``username`` and
-  ``employeeNumber`` are assigned by the fake
+- ids, ``version`` (incremented with every change), ``createdDate``/``lastModifiedDate``, ``username``,
+  ``employeeNumber`` and the ids of work schedule profile assignments are assigned by the fake
 - filters (``eq``, ``ne``, ``lt``, ``le``, ``gt``, ``ge``, ``like``, ``ilike``, ``in``, ``notin``, ``null``,
   ``notnull``, ``customAttribute<id>-eq``), ``sort``, ``properties`` and paging; like weclapp, it silently ignores
   filters on unknown properties
 - partial updates (``ignoreMissingProperties=true``) merge ``customAttributes`` per attribute; a stale ``version``
   is answered with ``409 optimistic_lock``
 - validation: missing required properties, read-only or unknown properties, a second employee for the same user and
-  references to unknown users are answered with ``400``
+  references to unknown users or work schedule profiles are answered with ``400``
 - ``dryRun=true`` validates without storing and answers without meta properties
 
 Like weclapp, the fake accepts several users with the same e-mail address; every user has at most one employee
@@ -40,13 +41,22 @@ import httpx
 from pydantic import SecretStr
 from pydantic.alias_generators import to_camel
 
-from weclapp_client._converters import date_to_ms, datetime_to_ms
+from weclapp_client._converters import date_to_ms, datetime_to_ms, is_start_of_day
 from weclapp_client.client import WeclappClient
 from weclapp_client.config import WeclappConfig
-from weclapp_client.models import CustomAttributeDefinition, CustomAttributeType, Employee, User, UserStatus
+from weclapp_client.models import (
+    CustomAttributeDefinition,
+    CustomAttributeType,
+    Employee,
+    User,
+    UserStatus,
+    WorkScheduleProfile,
+    WorkScheduleProfileAssignment,
+)
 from weclapp_client.resources.custom_attribute_definitions import CustomAttributeDefinitionsResource
 from weclapp_client.resources.employees import EmployeesResource
 from weclapp_client.resources.users import UsersResource
+from weclapp_client.resources.work_schedule_profiles import WorkScheduleProfilesResource
 
 __all__ = ["BASE_URL", "DEFAULT_API_TOKEN", "FakeWeclapp", "RecordedRequest"]
 
@@ -123,6 +133,14 @@ _RULES: Mapping[str, _ResourceRules] = {
         read_only=frozenset({"createdDate", "id", "lastModifiedDate", "systemCustomAttribute", "version"}),
         required=frozenset({"attributeKey", "attributeType"}),
         filterable=CustomAttributeDefinitionsResource.filterable_properties,
+        defaults={},
+        writable_via_api=False,
+    ),
+    "workScheduleProfile": _ResourceRules(
+        known=WorkScheduleProfilesResource.known_properties,
+        read_only=frozenset({"createdDate", "id", "lastModifiedDate", "version"}),
+        required=frozenset({"name", "type"}),
+        filterable=WorkScheduleProfilesResource.filterable_properties,
         defaults={},
         writable_via_api=False,
     ),
@@ -360,6 +378,7 @@ class FakeWeclapp:
         user_id: str,
         birth_date: date | None = None,
         entry_date: date | None = None,
+        work_schedule_profile_assignments: Sequence[WorkScheduleProfileAssignment] = (),
         **properties: Any,
     ) -> Employee:
         """
@@ -371,6 +390,10 @@ class FakeWeclapp:
             "userId": user_id,
             "birthDate": date_to_ms(birth_date) if birth_date else None,
             "entryDate": date_to_ms(entry_date) if entry_date else None,
+            "workScheduleProfileAssignments": [
+                assignment.model_dump(mode="json", by_alias=True, exclude_none=True)
+                for assignment in work_schedule_profile_assignments
+            ],
         }
         data.update({to_camel(name): value for name, value in properties.items()})
         return Employee.model_validate(self._render(self._insert("employee", data)))
@@ -398,6 +421,13 @@ class FakeWeclapp:
         stored = self._insert("customAttributeDefinition", data)
         return CustomAttributeDefinition.model_validate(self._render(stored))
 
+    def add_work_schedule_profile(
+        self, *, name: str, weekly_work_duration_in_minutes: int | None = None, profile_type: str = "USER"
+    ) -> WorkScheduleProfile:
+        """Adds a work schedule profile, e.g. ``name="Vollzeit 40h", weekly_work_duration_in_minutes=2400``."""
+        data = {"name": name, "type": profile_type, "weeklyWorkDurationInMinutes": weekly_work_duration_in_minutes}
+        return WorkScheduleProfile.model_validate(self._render(self._insert("workScheduleProfile", data)))
+
     @property
     def users(self) -> list[User]:
         """all users, ordered by id (without :attr:`current_user`)"""
@@ -414,6 +444,13 @@ class FakeWeclapp:
         return [
             CustomAttributeDefinition.model_validate(self._render(entity))
             for entity in self._sorted("customAttributeDefinition")
+        ]
+
+    @property
+    def work_schedule_profiles(self) -> list[WorkScheduleProfile]:
+        """all work schedule profiles, ordered by id"""
+        return [
+            WorkScheduleProfile.model_validate(self._render(entity)) for entity in self._sorted("workScheduleProfile")
         ]
 
     @property
@@ -618,6 +655,8 @@ class FakeWeclapp:
             return httpx.Response(200, json=self._render(updated, exclude=_META_PROPERTIES))
         updated["version"] = str(int(current["version"]) + 1)
         updated["lastModifiedDate"] = self._tick()
+        if resource == "employee":
+            self._assign_assignment_ids(updated)
         self._store[resource][current["id"]] = updated
         return httpx.Response(200, json=self._render(updated))
 
@@ -659,6 +698,19 @@ class FakeWeclapp:
                 issues.append(_issue("userId", "reference", "referenced entity not found"))
             elif any(other.get("userId") == entity["userId"] for other in others):
                 issues.append(_issue("userId", "consistency", "the user already has an employee record"))
+        if resource == "employee":
+            for index, assignment in enumerate(entity.get("workScheduleProfileAssignments") or []):
+                location = f"workScheduleProfileAssignments[{index}]"
+                start_date = assignment.get("startDate")
+                if not isinstance(start_date, int):
+                    issues.append(_issue(f"{location}.startDate", "not_empty", "startDate must not be empty"))
+                elif not is_start_of_day(start_date):
+                    message = "startDate must be a date truncated to the start of the day"
+                    issues.append(_issue(f"{location}.startDate", "consistency", message))
+                if assignment.get("workScheduleProfileId") not in self._store["workScheduleProfile"]:
+                    issues.append(
+                        _issue(f"{location}.workScheduleProfileId", "reference", "referenced entity not found")
+                    )
         return issues
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -673,8 +725,14 @@ class FakeWeclapp:
             entity["username"] = str(entity.get("email") or "").lower() or None
         if resource == "employee":
             entity["employeeNumber"] = str(next(self._employee_numbers))
+            self._assign_assignment_ids(entity)
         self._store[resource][entity["id"]] = entity
         return entity
+
+    def _assign_assignment_ids(self, employee: dict[str, Any]) -> None:
+        for assignment in employee.get("workScheduleProfileAssignments") or []:
+            if not assignment.get("id"):
+                assignment["id"] = str(next(self._ids))
 
     def _sorted(self, resource: str) -> list[dict[str, Any]]:
         return sorted(self._store[resource].values(), key=lambda entity: _sort_key(entity["id"]))

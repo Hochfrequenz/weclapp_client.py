@@ -28,6 +28,12 @@ class WeclappModel(BaseModel):
     )
 
 
+class IdReference(WeclappModel):
+    """A reference to another entity by its id (weclapp's ``onlyId``), e.g. a user role."""
+
+    id: str
+
+
 class WeclappEntity(WeclappModel):
     """An entity as returned by weclapp."""
 

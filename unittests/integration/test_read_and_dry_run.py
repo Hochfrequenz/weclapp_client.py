@@ -8,11 +8,13 @@ does not necessarily run all checks of a real request. The write tests (tier 2) 
 import itertools
 from collections import Counter, defaultdict
 from collections.abc import Callable
+from datetime import date
 from typing import Any
 
 import pytest
 
 from weclapp_client import Filter, NotFoundError, WeclappApiError, WeclappClient, WeclappValidationError
+from weclapp_client._converters import date_to_ms
 from weclapp_client._http import entity_path
 from weclapp_client.models import CustomAttributeDefinition, EmployeeCreate, User, UserCreate, UserStatus
 
@@ -281,6 +283,28 @@ def test_dry_run_second_employee_for_user(
     user_id = employee.user_id
     outcome = _rejection(lambda: client.employees.create(EmployeeCreate(user_id=user_id), dry_run=True))
     report.finding("P11", f"Dry-Run: zweite Personalakte für einen User: {outcome}")
+
+
+def test_dry_run_start_date_of_work_schedule(client: WeclappClient, report: IntegrationReport) -> None:
+    # for a user that already has an employee record, so weclapp rejects the request in any case
+    user_id = next((item.user_id for item in client.employees.iterate(properties=["userId"]) if item.user_id), None)
+    profile = next(iter(client.work_schedule_profiles.list()), None)
+    if user_id is None or profile is None:
+        report.finding("P5", "Startdatum nicht prüfbar, kein Employee oder kein Arbeitszeitprofil vorhanden")
+        return
+    for label, start_date in [
+        ("Mitternacht deutscher Zeit (wie der Client)", date_to_ms(date(2026, 11, 1))),
+        ("Mitternacht UTC", date_to_ms(date(2026, 11, 1)) + _HOUR_MS),
+    ]:
+        assignment = {"workScheduleProfileId": profile.id, "startDate": start_date}
+        body = {"userId": user_id, "workScheduleProfileAssignments": [assignment]}
+        try:
+            _raw(client, "POST", "employee", [("dryRun", "true")], body)
+        except WeclappValidationError as error:
+            rejected = any("startDate" in (issue.location or "") for issue in error.validation_errors)
+            report.finding(
+                "P5", f"Startdatum eines Arbeitszeitprofils als {label}: {'abgewiesen' if rejected else 'ok'}"
+            )
 
 
 def test_unknown_ids_raise_not_found(client: WeclappClient, report: IntegrationReport) -> None:

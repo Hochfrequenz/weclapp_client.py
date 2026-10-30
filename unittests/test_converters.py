@@ -2,9 +2,10 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
-from weclapp_client._converters import date_to_ms, datetime_to_ms, ms_to_date, ms_to_datetime
+from weclapp_client._converters import date_to_ms, datetime_to_ms, is_start_of_day, ms_to_date, ms_to_datetime
 
 ONE_DAY_MS = 86_400_000
+ONE_HOUR_MS = 3_600_000
 BIRTH_DATE_MS = 482_112_000_000  # 1985-04-12T00:00:00Z
 
 
@@ -28,9 +29,19 @@ def test_naive_datetimes_are_rejected() -> None:
         datetime_to_ms(datetime(2026, 1, 1))
 
 
-def test_date_is_written_as_midnight_utc() -> None:
-    assert date_to_ms(date(1970, 1, 2)) == ONE_DAY_MS
-    assert date_to_ms(date(1985, 4, 12)) == BIRTH_DATE_MS
+def test_date_is_written_as_midnight_german_time() -> None:
+    assert date_to_ms(date(1970, 1, 2)) == ONE_DAY_MS - ONE_HOUR_MS  # standard time
+    assert date_to_ms(date(1985, 4, 12)) == BIRTH_DATE_MS - 2 * ONE_HOUR_MS  # summer time
+
+
+@pytest.mark.parametrize("value", [date(1950, 1, 1), date(2020, 4, 1), date(2026, 11, 1)])
+def test_written_dates_are_the_start_of_the_day_for_weclapp(value: date) -> None:
+    assert is_start_of_day(date_to_ms(value))
+
+
+def test_midnight_utc_is_not_the_start_of_the_day_for_weclapp() -> None:
+    assert not is_start_of_day(BIRTH_DATE_MS)
+    assert not is_start_of_day(ONE_DAY_MS)
 
 
 @pytest.mark.parametrize("value", [date(1969, 12, 31), date(1950, 1, 1), date(1900, 3, 1)])

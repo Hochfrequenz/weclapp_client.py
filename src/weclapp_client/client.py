@@ -12,6 +12,7 @@ from weclapp_client.config import WeclappConfig
 from weclapp_client.resources.custom_attribute_definitions import CustomAttributeDefinitionsResource
 from weclapp_client.resources.employees import EmployeesResource
 from weclapp_client.resources.users import UsersResource
+from weclapp_client.resources.work_schedule_profiles import WorkScheduleProfilesResource
 
 
 class WeclappClient:
@@ -35,6 +36,8 @@ class WeclappClient:
         """``/employee``: the HR records, each linked to a user"""
         self.custom_attribute_definitions = CustomAttributeDefinitionsResource(self._transport)
         """``/customAttributeDefinition``: the definitions of custom attributes"""
+        self.work_schedule_profiles = WorkScheduleProfilesResource(self._transport)
+        """``/workScheduleProfile``: the working times that can be assigned to employees"""
 
     def close(self) -> None:
         """Closes the HTTP connections (unless the ``httpx.Client`` was passed in)."""

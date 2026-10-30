@@ -14,7 +14,7 @@ from weclapp_client.query import Filter, validate_filters
         (Filter.eq("canEditDashboard", True), ("canEditDashboard-eq", "true")),
         (Filter.eq("canEditDashboard", False), ("canEditDashboard-eq", "false")),
         (Filter.ne("userId", 4711), ("userId-ne", "4711")),
-        (Filter.lt("birthDate", date(1970, 1, 2)), ("birthDate-lt", "86400000")),
+        (Filter.lt("birthDate", date(1970, 1, 2)), ("birthDate-lt", "82800000")),
         (Filter.le("lastModifiedDate", datetime(1970, 1, 1, 0, 0, 1, tzinfo=UTC)), ("lastModifiedDate-le", "1000")),
         (Filter.gt("lastModifiedDate", 1700000000000), ("lastModifiedDate-gt", "1700000000000")),
         (Filter.ge("version", "2"), ("version-ge", "2")),
@@ -25,7 +25,7 @@ from weclapp_client.query import Filter, validate_filters
         (Filter.not_null("email"), ("email-notnull", "")),
         (Filter.in_("id", ["1", "2"]), ("id-in", '["1", "2"]')),
         (Filter.in_("status", [UserStatus.ACTIVE, UserStatus.NOT_ACTIVE]), ("status-in", '["ACTIVE", "NOT_ACTIVE"]')),
-        (Filter.not_in("birthDate", [date(1970, 1, 2), 5]), ("birthDate-notin", "[86400000, 5]")),
+        (Filter.not_in("birthDate", [date(1970, 1, 2), 5]), ("birthDate-notin", "[82800000, 5]")),
         (Filter.custom_attribute_eq("9001", "00042"), ("customAttribute9001-eq", "00042")),
     ],
 )
