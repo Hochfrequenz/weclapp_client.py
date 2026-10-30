@@ -1,6 +1,6 @@
 # Integrationstests gegen einen weclapp-Tenant (AP 6)
 
-Die Integrationstests prüfen die Punkte P1–P11 aus dem [Umsetzungsplan](umsetzungsplan.md), also das Verhalten
+Die Integrationstests prüfen die Punkte P1–P13 aus dem [Umsetzungsplan](umsetzungsplan.md), also das Verhalten
 der echten weclapp-API, auf das sich Client und `FakeWeclapp` verlassen. Sie liegen in `unittests/integration/` und
 werden ohne Zugangsdaten automatisch übersprungen, auch in der CI.
 

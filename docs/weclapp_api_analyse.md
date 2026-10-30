@@ -205,7 +205,8 @@ Eingabe: personalnummer, vorname, nachname, geburtsdatum, email
 | `status` | `ACTIVE`, `DEPARTURE`, `NOT_ACTIVE` | ✓ | für „nur verwaltete“ Mitarbeiter `NOT_ACTIVE`, das Sync-Repo nutzt `ACTIVE` |
 | `canEditDashboard` | boolean | ✓ | `false`; ein Dry-Run ohne das Feld wird trotzdem akzeptiert (P1) |
 | `firstName`, `lastName` | string (50) | | **Name** |
-| `title`, `phoneNumber`, `mobilePhoneNumber`, `faxNumber` | string | | später ggf. |
+| `mobilePhoneNumber` | string (100) | | **Mobilnummer**, wird unverändert gespeichert (P12) |
+| `title`, `phoneNumber`, `faxNumber` | string | | später ggf. |
 | `userRoles` | `[{id}]` | | → `/userRole` |
 | `licenses` | `[string]` | | leer lassen |
 | `customAttributes` | `[customAttribute]` | | **Personalnummer** (Option a) |
@@ -309,6 +310,8 @@ dem Tenant.
 | P9 | Der Token funktioniert. Es ist ein persönlicher Token, noch kein technischer API-User. | Die minimalen Rechte sind offen, sie sind die Grundlage für die Einrichtungsdoku |
 | P10 | 400: Problem-JSON vom Typ `validation` mit `validationErrors`. 401 bei ungültigem Token: `error` `unauthorized`, `detail` „no identity available“. 404: `not_found`. 409 bei veralteter `version`: `optimistic_lock`, auch im Dry-Run. | passt zum Fehler-Mapping des Clients |
 | P11 | Kein User hat mehr als eine Personalakte. Ein Dry-Run für eine zweite Personalakte wird mit 400 abgewiesen, `validationErrors` vom Typ `consistency`. | `FakeWeclapp` meldet den Fall jetzt ebenfalls als `consistency` |
+| P12 | `mobilePhoneNumber` (30.10.2026, [#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)): Die vorhandenen Nummern stehen fast alle im Format `+49 151 12345678`, also international mit Leerzeichen. weclapp speichert die Nummer unverändert und prüft das Format nicht, auch nationale Nummern oder Text nimmt ein Dry-Run an. Mehr als 100 Zeichen weist es mit 400 ab (`validationErrors` vom Typ `size`). | `mobile_phone_number` an `User`, `UserCreate` und `UserUpdate`, höchstens 100 Zeichen. Das Sync-Repo sendet das übliche Format und kann beim Vergleich exakt vergleichen |
+| P13 | Auswahlwerte (30.10.2026, [#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)): `selectableValues` einer `LIST`-Definition sind Entitäten mit `id`, `version`, `value` (die Bezeichnung), `active`, `defaultValue` und `positionNumber` (beginnt bei 1). Ein Dry-Run mit dem Auswahlwert einer anderen Definition oder einer unbekannten ID wird mit 400 abgewiesen, ohne `validationErrors`, nur mit `detail` „invalid selectable value id: …“. | `CustomAttributeDefinition.selectable_values` mit `CustomAttributeListValue`. `FakeWeclapp` nimmt Auswahlwerte an und weist fremde IDs genauso ab |
 
 **Noch offen**, zu klären mit dem ersten echten Lauf des Sync-Repos (ein User, eine Personalakte):
 

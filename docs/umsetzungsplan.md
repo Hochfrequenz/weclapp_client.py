@@ -343,9 +343,9 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
 
   | Modell | Felder |
   |---|---|
-  | `User` | `id`, `version`, `created_date`, `last_modified_date`, `username`, `email`, `first_name`, `last_name`, `status`, `can_edit_dashboard`, `licenses`, `user_roles`, `custom_attributes`, dazu die Hilfsmethode `custom_attribute(definition_id)` |
-  | `UserCreate` | `email`, `status`, `can_edit_dashboard` (alle drei Pflicht laut Spec), `first_name`, `last_name`, `licenses`, `user_roles`, `custom_attributes` |
-  | `UserUpdate` | `email`, `first_name`, `last_name`, `status`, `custom_attributes` |
+  | `User` | `id`, `version`, `created_date`, `last_modified_date`, `username`, `email`, `first_name`, `last_name`, `mobile_phone_number`, `status`, `can_edit_dashboard`, `licenses`, `user_roles`, `custom_attributes`, dazu die Hilfsmethode `custom_attribute(definition_id)` |
+  | `UserCreate` | `email`, `status`, `can_edit_dashboard` (alle drei Pflicht laut Spec), `first_name`, `last_name`, `mobile_phone_number`, `licenses`, `user_roles`, `custom_attributes` |
+  | `UserUpdate` | `email`, `first_name`, `last_name`, `mobile_phone_number`, `status`, `custom_attributes` |
   | `Employee` | `id`, `version`, `created_date`, `last_modified_date`, `employee_number`, `user_id`, `birth_date`, `entry_date`, `employment_status`, `work_schedule_profile_assignments` |
   | `EmployeeCreate` | `user_id` (Pflicht laut Spec), `birth_date`, `entry_date`, `work_schedule_profile_assignments` |
   | `EmployeeUpdate` | `birth_date` |
@@ -353,7 +353,8 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
   | `WorkScheduleProfile` | `id`, `version`, `name`, `description`, `type`, `weekly_work_days`, `weekly_work_duration_in_minutes` |
   | `IdReference` | `id`, z. B. für `user_roles` |
   | `CustomAttribute` | `attribute_definition_id`, `string_value`, `number_value`, `selected_value_id`, dazu die Fabrikmethoden `of_string(...)`, `of_number(...)` und `of_selection(...)` |
-  | `CustomAttributeDefinition` | `id`, `version`, `attribute_key`, `attribute_type`, `label`, `active`, `attribute_entity_type`, `entities` |
+  | `CustomAttributeDefinition` | `id`, `version`, `attribute_key`, `attribute_type`, `label`, `active`, `attribute_entity_type`, `entities`, `selectable_values` |
+  | `CustomAttributeListValue` | `id`, `value`, `active`, `default_value`, `position_number` (ein Auswahlwert eines `LIST`-Attributs) |
 
 - Enums: `UserStatus` (`ACTIVE`, `DEPARTURE`, `NOT_ACTIVE`) und, als Vorbereitung für später,
   `EmploymentStatus` (`ACTIVE`, `INACTIVE`, `LEAVE_OF_ABSENCE`, `ONBOARDING`). Unbekannte
@@ -495,6 +496,8 @@ Prüfpunkte (die ⚠-Punkte aus der Analyse):
 | P9 | minimale Rechte des API-Users | Rolle schrittweise einschränken | Einrichtungsdoku |
 | P10 | Format echter Fehlerantworten (400, 403, 404, 409) | Fehler gezielt provozieren | Fehler-Mapping, Fake |
 | P11 | Kann ein User mehrere Personalakten haben? (Der Fake nimmt an: nein) | zweiten `POST /employee` für denselben User | Fake, Doku für das Sync-Repo |
+| P12 | Format und Länge von `mobilePhoneNumber` am User ([#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)) | vorhandene Nummern lesen, Dry-Runs | `UserCreate`, Doku für das Sync-Repo |
+| P13 | Aufbau der Auswahlwerte (`selectableValues`) und Prüfung von `selectedValueId` ([#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)) | Definitionen lesen, Dry-Runs | `CustomAttributeDefinition`, Fake |
 
 - Die Integrationstests liegen in `unittests/integration/`. Sie laufen nur, wenn
   `WECLAPP_API_TOKEN` und `WECLAPP_BASE_URL` bzw. `WECLAPP_TENANT` gesetzt sind, also nicht in der CI.

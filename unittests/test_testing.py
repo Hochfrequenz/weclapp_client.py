@@ -129,6 +129,55 @@ def test_user_with_licenses_roles_and_typed_attributes(fake: FakeWeclapp, client
     ]
 
 
+def test_mobile_phone_number_round_trip(fake: FakeWeclapp, client: WeclappClient) -> None:
+    created = client.users.create(_new_user(mobile_phone_number="+49 151 12345678"))
+    added = fake.add_user(email="b@example.com", mobile_phone_number="+49 30 1234567")
+
+    assert created.mobile_phone_number == "+49 151 12345678"
+    assert client.users.get(created.id) == created
+    assert client.users.find_one(Filter.eq("mobilePhoneNumber", "+49 30 1234567")) == added
+    assert [user.mobile_phone_number for user in fake.users] == ["+49 151 12345678", "+49 30 1234567"]
+
+
+def test_list_definition_with_selectable_values(fake: FakeWeclapp, client: WeclappClient) -> None:
+    added = fake.add_custom_attribute_definition(
+        attribute_key="bundesland", attribute_type=CustomAttributeType.LIST, selectable_values=["Bayern", "Hessen"]
+    )
+
+    definition = client.custom_attribute_definitions.get(added.id)
+    assert definition == added
+    assert [(value.value, value.active, value.position_number) for value in definition.selectable_values] == [
+        ("Bayern", True, 1),
+        ("Hessen", True, 2),
+    ]
+    assert len({value.id for value in definition.selectable_values} | {definition.id}) == 3
+
+
+def test_selected_value_must_belong_to_the_definition(fake: FakeWeclapp, client: WeclappClient) -> None:
+    state = fake.add_custom_attribute_definition(
+        attribute_key="bundesland", attribute_type=CustomAttributeType.LIST, selectable_values=["Bayern"]
+    )
+    other = fake.add_custom_attribute_definition(
+        attribute_key="abteilung", attribute_type=CustomAttributeType.LIST, selectable_values=["Vertrieb"]
+    )
+    bavaria, sales = state.selectable_values[0].id, other.selectable_values[0].id
+
+    user = client.users.create(_new_user(custom_attributes=[CustomAttribute.of_selection(state.id, bavaria)]))
+    assert user.custom_attribute(state.id) == CustomAttribute.of_selection(state.id, bavaria)
+
+    for value_id in [sales, "1"]:
+        with pytest.raises(WeclappValidationError) as error:
+            client.users.create(
+                _new_user(custom_attributes=[CustomAttribute.of_selection(state.id, value_id)]), dry_run=True
+            )
+        assert error.value.detail == f"invalid selectable value id: {value_id}"
+        assert error.value.validation_errors == ()
+    update = UserUpdate(custom_attributes=[CustomAttribute.of_selection(state.id, sales)])
+    with pytest.raises(WeclappValidationError):
+        client.users.update(user, update)
+    assert fake.users[0].custom_attribute(state.id) == CustomAttribute.of_selection(state.id, bavaria)
+
+
 def test_employee_with_work_schedule_profile(fake: FakeWeclapp, client: WeclappClient) -> None:
     profile = fake.add_work_schedule_profile(name="Vollzeit 40h", weekly_work_duration_in_minutes=2400)
     assignment = WorkScheduleProfileAssignment(work_schedule_profile_id=profile.id, start_date=date(2026, 11, 1))

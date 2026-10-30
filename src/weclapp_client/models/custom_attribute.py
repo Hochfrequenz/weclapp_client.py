@@ -60,6 +60,18 @@ class CustomAttribute(WeclappModel):
         return cls(attribute_definition_id=definition_id, selected_value_id=value_id)
 
 
+class CustomAttributeListValue(WeclappModel):
+    """A value to choose from in a custom attribute of type ``LIST`` (``selectableValues`` of the definition)."""
+
+    id: str
+    """the id to pass to :meth:`CustomAttribute.of_selection`"""
+    value: str | None = None
+    """the label shown in weclapp, e.g. ``Bayern``"""
+    active: bool | None = None
+    default_value: bool | None = None
+    position_number: int | None = None
+
+
 class CustomAttributeDefinition(WeclappEntity):
     """The definition of a custom attribute (``/customAttributeDefinition``)."""
 
@@ -72,3 +84,5 @@ class CustomAttributeDefinition(WeclappEntity):
     """for attributes of type ``ENTITY``: the type of the referenced entity (e.g. ``party``); empty otherwise"""
     entities: list[str] = Field(default_factory=list)
     """the entities the attribute belongs to, e.g. ``["user"]``"""
+    selectable_values: list[CustomAttributeListValue] = Field(default_factory=list)
+    """for attributes of type ``LIST``: the values to choose from; weclapp rejects the id of any other value"""

@@ -100,6 +100,7 @@ def test_create_user_with_licenses_roles_and_typed_attributes() -> None:
         UserCreate(
             email="erika.musterfrau@example.com",
             status=UserStatus.ACTIVE,
+            mobile_phone_number="+49 151 12345678",
             licenses=["WECLAPP_PROJECT"],
             user_roles=[IdReference(id="9101")],
             custom_attributes=[CustomAttribute.of_number("9003", 59), CustomAttribute.of_selection("9002", "5")],
@@ -107,8 +108,8 @@ def test_create_user_with_licenses_roles_and_typed_attributes() -> None:
     )
     assert router.requests[0].content == (
         b'{"email":"erika.musterfrau@example.com","status":"ACTIVE","canEditDashboard":false,'
-        b'"licenses":["WECLAPP_PROJECT"],"userRoles":[{"id":"9101"}],"customAttributes":'
-        b'[{"attributeDefinitionId":"9003","numberValue":"59"},{"attributeDefinitionId":"9002","selectedValueId":"5"}]}'
+        b'"mobilePhoneNumber":"+49 151 12345678","licenses":["WECLAPP_PROJECT"],"userRoles":[{"id":"9101"}],'
+        b'"customAttributes":[{"attributeDefinitionId":"9003","numberValue":"59"},{"attributeDefinitionId":"9002","selectedValueId":"5"}]}'
     )
 
 

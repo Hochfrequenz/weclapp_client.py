@@ -1,0 +1,32 @@
+{
+  "id": "9002",
+  "version": "1",
+  "attributeKey": "bundesland",
+  "attributeType": "LIST",
+  "label": "Bundesland",
+  "active": true,
+  "mandatory": false,
+  "entities": ["user"],
+  "selectableValues": [
+    {
+      "id": "9011",
+      "version": "0",
+      "createdDate": 1700000000000,
+      "lastModifiedDate": 1700000000000,
+      "value": "Bayern",
+      "active": true,
+      "defaultValue": false,
+      "positionNumber": 1
+    },
+    {
+      "id": "9012",
+      "version": "0",
+      "createdDate": 1700000000000,
+      "lastModifiedDate": 1700000000000,
+      "value": "Hessen",
+      "active": true,
+      "defaultValue": false,
+      "positionNumber": 2
+    }
+  ]
+}

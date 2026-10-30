@@ -13,7 +13,8 @@ synchronisation logic:
 - partial updates (``ignoreMissingProperties=true``) merge ``customAttributes`` per attribute; a stale ``version``
   is answered with ``409 optimistic_lock``
 - validation: missing required properties, read-only or unknown properties, a second employee for the same user and
-  references to unknown users or work schedule profiles are answered with ``400``
+  references to unknown users or work schedule profiles are answered with ``400``, like a selected value that does not
+  belong to the definition of a list attribute
 - ``dryRun=true`` validates without storing and answers without meta properties
 
 Like weclapp, the fake accepts several users with the same e-mail address; every user has at most one employee
@@ -189,8 +190,20 @@ class _InvalidBody:
 _INVALID_BODY = _InvalidBody()
 
 
-def _problem(status: int, problem_type: str, title: str, *, issues: Sequence[Mapping[str, str]] = ()) -> httpx.Response:
-    body: dict[str, Any] = {"status": status, "title": title, "type": _ERROR_TYPE + problem_type, "detail": title}
+def _problem(
+    status: int,
+    problem_type: str,
+    title: str,
+    *,
+    detail: str | None = None,
+    issues: Sequence[Mapping[str, str]] = (),
+) -> httpx.Response:
+    body: dict[str, Any] = {
+        "status": status,
+        "title": title,
+        "type": _ERROR_TYPE + problem_type,
+        "detail": detail or title,
+    }
     if issues:
         body["validationErrors"] = list(issues)
     return httpx.Response(status, json=body)
@@ -202,6 +215,11 @@ def _issue(location: str, kind: str, title: str) -> dict[str, str]:
 
 def _validation_failed(issues: Sequence[Mapping[str, str]]) -> httpx.Response:
     return _problem(400, "validation", "validation failed", issues=issues)
+
+
+def _invalid_selectable_value(value_id: str) -> httpx.Response:
+    # weclapp answers without validationErrors here
+    return _problem(400, "validation", "validation failed", detail=f"invalid selectable value id: {value_id}")
 
 
 def _without_nulls(value: Any) -> Any:
@@ -405,11 +423,16 @@ class FakeWeclapp:
         attribute_type: CustomAttributeType | str = CustomAttributeType.STRING,
         label: str | None = None,
         entity: str = "user",
+        selectable_values: Sequence[str] = (),
     ) -> CustomAttributeDefinition:
         """
         Adds the definition of a custom attribute (by default of type ``STRING`` for users). Like weclapp, it leaves
         ``attributeEntityType`` empty: weclapp only sets it for attributes that reference another entity.
+
+        :param selectable_values: the labels of the values of a ``LIST`` attribute, e.g. ``["Bayern", "Hessen"]``;
+            the fake assigns their ids and rejects any other ``selectedValueId`` for this attribute
         """
+        now = self._tick()
         data = {
             "attributeKey": attribute_key,
             "attributeType": str(attribute_type),
@@ -417,6 +440,19 @@ class FakeWeclapp:
             "active": True,
             "mandatory": False,
             "entities": [entity],
+            "selectableValues": [
+                {
+                    "id": str(next(self._ids)),
+                    "version": "0",
+                    "createdDate": now,
+                    "lastModifiedDate": now,
+                    "value": value,
+                    "active": True,
+                    "defaultValue": False,
+                    "positionNumber": position,
+                }
+                for position, value in enumerate(selectable_values, start=1)
+            ],
         }
         stored = self._insert("customAttributeDefinition", data)
         return CustomAttributeDefinition.model_validate(self._render(stored))
@@ -614,6 +650,9 @@ class FakeWeclapp:
         issues = self._check_content(resource, rules, entity, own_id=None)
         if issues:
             return _validation_failed(issues)
+        invalid_value_id = self._invalid_selectable_value_id(entity)
+        if invalid_value_id is not None:
+            return _invalid_selectable_value(invalid_value_id)
         if dry_run:
             return httpx.Response(200, json=self._render(entity, exclude=_META_PROPERTIES))
         return httpx.Response(201, json=self._render(self._insert(resource, entity)))
@@ -651,6 +690,9 @@ class FakeWeclapp:
         issues = self._check_content(resource, rules, updated, own_id=current["id"])
         if issues:
             return _validation_failed(issues)
+        invalid_value_id = self._invalid_selectable_value_id(updated)
+        if invalid_value_id is not None:
+            return _invalid_selectable_value(invalid_value_id)
         if params.get("dryRun") == "true":
             return httpx.Response(200, json=self._render(updated, exclude=_META_PROPERTIES))
         updated["version"] = str(int(current["version"]) + 1)
@@ -712,6 +754,17 @@ class FakeWeclapp:
                         _issue(f"{location}.workScheduleProfileId", "reference", "referenced entity not found")
                     )
         return issues
+
+    def _invalid_selectable_value_id(self, entity: Mapping[str, Any]) -> str | None:
+        """the first selected value that is not a value of its (known) list definition, as weclapp rejects it"""
+        for attribute in entity.get("customAttributes") or []:
+            value_id = attribute.get("selectedValueId")
+            definition = self._store["customAttributeDefinition"].get(str(attribute.get("attributeDefinitionId")))
+            if value_id is None or definition is None:
+                continue
+            if value_id not in {value.get("id") for value in definition.get("selectableValues") or []}:
+                return str(value_id)
+        return None
 
     # ------------------------------------------------------------------------------------------------------------------
     # storage

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from weclapp_client.models import (
     CustomAttribute,
     CustomAttributeDefinition,
+    CustomAttributeListValue,
     CustomAttributeType,
     Employee,
     EmployeeCreate,
@@ -34,6 +35,7 @@ def test_user_is_parsed_and_unknown_properties_are_ignored() -> None:
     assert user.status is UserStatus.NOT_ACTIVE
     assert user.can_edit_dashboard is False
     assert user.created_date == datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+    assert user.mobile_phone_number == "+49 151 00000000"
     assert not hasattr(user, "phone_number")
 
 
@@ -117,6 +119,16 @@ def test_custom_attribute_definition_is_parsed() -> None:
     assert definition.attribute_type is CustomAttributeType.STRING
     assert definition.entities == ["user"]
     assert definition.attribute_entity_type is None
+    assert definition.selectable_values == []
+
+
+def test_selectable_values_of_a_list_definition_are_parsed() -> None:
+    definition = CustomAttributeDefinition.model_validate(load_fixture("custom_attribute_definition_list"))
+    assert definition.attribute_type is CustomAttributeType.LIST
+    assert definition.selectable_values == [
+        CustomAttributeListValue(id="9011", value="Bayern", active=True, default_value=False, position_number=1),
+        CustomAttributeListValue(id="9012", value="Hessen", active=True, default_value=False, position_number=2),
+    ]
 
 
 def test_python_dump_keeps_python_types() -> None:
@@ -134,6 +146,7 @@ def test_user_create_payload() -> None:
         email="erika.musterfrau@example.com",
         status=UserStatus.NOT_ACTIVE,
         first_name="Erika",
+        mobile_phone_number="+49 151 12345678",
         custom_attributes=[CustomAttribute.of_string("9001", "00042")],
     )
     assert data.to_payload() == {
@@ -141,6 +154,7 @@ def test_user_create_payload() -> None:
         "status": "NOT_ACTIVE",
         "canEditDashboard": False,
         "firstName": "Erika",
+        "mobilePhoneNumber": "+49 151 12345678",
         "customAttributes": [{"attributeDefinitionId": "9001", "stringValue": "00042"}],
     }
 
@@ -184,6 +198,7 @@ def test_user_create_requires_email_and_status() -> None:
         {"email": "", "status": "NOT_ACTIVE"},
         {"email": "a@example.com", "status": "NOT_ACTIVE", "first_name": "x" * 51},
         {"email": "a@example.com", "status": "NOT_ACTIVE", "last_name": "x" * 51},
+        {"email": "a@example.com", "status": "NOT_ACTIVE", "mobile_phone_number": "1" * 101},
         {"email": "a@example.com", "status": "UNKNOWN"},
         {"email": "a@example.com", "status": "NOT_ACTIVE", "username": "not writable"},
     ],
@@ -196,6 +211,14 @@ def test_user_create_rejects_invalid_data(data: dict[str, str]) -> None:
 def test_names_with_50_characters_are_accepted() -> None:
     data = UserCreate(email="a@example.com", status=UserStatus.ACTIVE, first_name="x" * 50, last_name="y" * 50)
     assert data.first_name == "x" * 50
+
+
+def test_mobile_phone_numbers_with_100_characters_are_accepted() -> None:
+    number = "+49 " + "1" * 96
+    assert UserCreate(email="a@example.com", status=UserStatus.ACTIVE, mobile_phone_number=number).mobile_phone_number
+    assert UserUpdate(mobile_phone_number=number).to_payload() == {"mobilePhoneNumber": number}
+    with pytest.raises(ValidationError):
+        UserUpdate(mobile_phone_number=number + "1")
 
 
 def test_user_update_sends_only_fields_set_explicitly() -> None:
