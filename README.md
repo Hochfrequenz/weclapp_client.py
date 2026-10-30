@@ -49,26 +49,28 @@ from weclapp_client.models import (
 
 # the ids of custom attributes, list values, user roles and work schedule profiles differ from tenant to tenant
 PERSONNEL_NUMBER_ATTRIBUTE_ID, COST_RATE_ATTRIBUTE_ID = "1001", "1002"
-STATE_ATTRIBUTE_ID, BAVARIA_VALUE_ID = "1003", "1004"
-TIME_TRACKING_ROLE_ID, FULL_TIME_PROFILE_ID = "1005", "1006"
+STATE_ATTRIBUTE_ID, TIME_TRACKING_ROLE_ID, FULL_TIME_PROFILE_ID = "1003", "1004", "1005"
 
 # reads WECLAPP_API_TOKEN and WECLAPP_BASE_URL (or WECLAPP_TENANT)
 with WeclappClient(WeclappConfig.from_env()) as client:
     definition = client.custom_attribute_definitions.get(PERSONNEL_NUMBER_ATTRIBUTE_ID)
     user = client.users.find_one(Filter.custom_attribute_eq(definition.id, "00042"))
     if user is None:
+        state = client.custom_attribute_definitions.get(STATE_ATTRIBUTE_ID)
+        bavaria = next(value for value in state.selectable_values if value.value == "Bayern")
         user = client.users.create(
             UserCreate(
                 email="erika.musterfrau@example.com",
                 first_name="Erika",
                 last_name="Musterfrau",
+                mobile_phone_number="+49 151 12345678",
                 status=UserStatus.ACTIVE,
                 licenses=["WECLAPP_PROJECT"],
                 user_roles=[IdReference(id=TIME_TRACKING_ROLE_ID)],
                 custom_attributes=[
                     CustomAttribute.of_string(definition.id, "00042"),
                     CustomAttribute.of_number(COST_RATE_ATTRIBUTE_ID, Decimal("59")),
-                    CustomAttribute.of_selection(STATE_ATTRIBUTE_ID, BAVARIA_VALUE_ID),
+                    CustomAttribute.of_selection(state.id, bavaria.id),
                 ],
             )
         )
@@ -86,6 +88,9 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - `create()` and `update()` accept `dry_run=True`: weclapp validates the data without storing it, and the method
   returns `None` (weclapp does not assign ids in dry runs).
 - weclapp assigns the `username` of a user itself; it is read-only and usually equals the e-mail address.
+- weclapp stores `mobile_phone_number` as sent, without checking or normalising the format (at most 100 characters).
+- `CustomAttributeDefinition.selectable_values` lists the values of a `LIST` attribute with id and label (`value`).
+  weclapp rejects the id of a value that belongs to another attribute.
 - The entry date of an employee is usually the start date of the first work schedule profile
   (`Employee.work_schedule_profile_assignments`); `entry_date` is often empty. `client.work_schedule_profiles` lists
   the profiles with their weekly working time, e.g. to check configured profile ids.
@@ -175,6 +180,8 @@ def test_timeout_while_creating_an_employee() -> None:
 - `add_user()`, `add_employee()`, `add_custom_attribute_definition()` and `add_work_schedule_profile()` arrange test
   data without validation, so inconsistent states (e.g. duplicate personnel numbers) can be tested as well. Like
   weclapp, the fake rejects employees with an unknown work schedule profile, so add the profiles your code uses.
+  `add_custom_attribute_definition(attribute_type=CustomAttributeType.LIST, selectable_values=["Bayern", ...])` adds
+  a list attribute; like weclapp, the fake then rejects the id of any value that does not belong to it.
 - `users`, `employees`, `requests` and `write_requests` show the state and the requests received.
 - `fail_next()` lets the next matching request fail with a status code or an exception.
 - Like weclapp, the fake accepts several users with the same e-mail address, so check for an existing user yourself
