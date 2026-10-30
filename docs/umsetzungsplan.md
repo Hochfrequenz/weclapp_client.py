@@ -343,13 +343,16 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
 
   | Modell | Felder |
   |---|---|
-  | `User` | `id`, `version`, `created_date`, `last_modified_date`, `username`, `email`, `first_name`, `last_name`, `status`, `can_edit_dashboard`, `custom_attributes`, dazu die Hilfsmethode `custom_attribute(definition_id)` |
-  | `UserCreate` | `email`, `status`, `can_edit_dashboard` (alle drei Pflicht laut Spec), `first_name`, `last_name`, `custom_attributes` |
+  | `User` | `id`, `version`, `created_date`, `last_modified_date`, `username`, `email`, `first_name`, `last_name`, `status`, `can_edit_dashboard`, `licenses`, `user_roles`, `custom_attributes`, dazu die Hilfsmethode `custom_attribute(definition_id)` |
+  | `UserCreate` | `email`, `status`, `can_edit_dashboard` (alle drei Pflicht laut Spec), `first_name`, `last_name`, `licenses`, `user_roles`, `custom_attributes` |
   | `UserUpdate` | `email`, `first_name`, `last_name`, `status`, `custom_attributes` |
-  | `Employee` | `id`, `version`, `created_date`, `last_modified_date`, `employee_number`, `user_id`, `birth_date`, `entry_date` |
-  | `EmployeeCreate` | `user_id` (Pflicht laut Spec), `birth_date`, `entry_date` |
+  | `Employee` | `id`, `version`, `created_date`, `last_modified_date`, `employee_number`, `user_id`, `birth_date`, `entry_date`, `employment_status`, `work_schedule_profile_assignments` |
+  | `EmployeeCreate` | `user_id` (Pflicht laut Spec), `birth_date`, `entry_date`, `work_schedule_profile_assignments` |
   | `EmployeeUpdate` | `birth_date` |
-  | `CustomAttribute` | `attribute_definition_id`, `string_value`, dazu die Fabrikmethode `of_string(definition_id, value)` |
+  | `WorkScheduleProfileAssignment` | `work_schedule_profile_id`, `start_date`, `end_date`, `id` (vergibt weclapp) |
+  | `WorkScheduleProfile` | `id`, `version`, `name`, `description`, `type`, `weekly_work_days`, `weekly_work_duration_in_minutes` |
+  | `IdReference` | `id`, z. B. für `user_roles` |
+  | `CustomAttribute` | `attribute_definition_id`, `string_value`, `number_value`, `selected_value_id`, dazu die Fabrikmethoden `of_string(...)`, `of_number(...)` und `of_selection(...)` |
   | `CustomAttributeDefinition` | `id`, `version`, `attribute_key`, `attribute_type`, `label`, `active`, `attribute_entity_type`, `entities` |
 
 - Enums: `UserStatus` (`ACTIVE`, `DEPARTURE`, `NOT_ACTIVE`) und, als Vorbereitung für später,
@@ -360,9 +363,10 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
     `datetime.fromtimestamp()`. **Geburtsdaten vor 1970 ergeben negative Timestamps**, und die
     kann `fromtimestamp()` unter Windows nicht verarbeiten.
   - Die Zeitzonen-Konvention für reine Datumsfelder wie `birth_date` steht an genau einer
-    Stelle. Geschrieben wird Mitternacht UTC. Beim Lesen wird auf die nächste Mitternacht
-    gerundet, damit auch Werte richtig gelesen werden, die weclapp als Mitternacht deutscher
-    Zeit speichert (22:00 bzw. 23:00 UTC am Vortag). Prüfpunkt P5 bestätigt das.
+    Stelle. Geschrieben wird Mitternacht deutscher Zeit (22:00 bzw. 23:00 UTC am Vortag), so
+    wie die Oberfläche speichert. Beim Startdatum eines Arbeitszeitprofils verlangt weclapp das
+    (P5); ursprünglich war Mitternacht UTC geplant. Beim Lesen wird auf die nächste Mitternacht
+    gerundet, damit Werte in beiden Formen richtig gelesen werden.
 - **Tests:**
   - Parsen von Beispiel-JSON, abgeleitet aus der Spec
   - Create-Modelle ohne Pflichtfelder schlagen fehl
@@ -412,6 +416,8 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
 - `client.custom_attribute_definitions` (`/customAttributeDefinition`): `get_by_key(key)`
   lädt die Definitionen einmal (mit Cache) und sucht lokal nach dem Key. Fehlt das Attribut
   oder ist es nicht vom Typ `STRING`, gibt es einen Fehler.
+- `client.work_schedule_profiles` (`/workScheduleProfile`, nur lesend): die Arbeitszeitprofile,
+  z. B. um konfigurierte Profil-IDs zu prüfen.
 - `WeclappClient(config, *, http_client=None)`: Kontextmanager. Für Tests lässt sich ein
   eigener `httpx.Client` übergeben.
 - **Tests:** Pfade und Parameter jeder Ressource, Smoke-Test der öffentlichen API (die
@@ -584,7 +590,7 @@ sie beim Start des Sync-Repos nicht verloren gehen. Die Issues liegen inzwischen
 | Risiko | Gegenmaßnahme |
 |---|---|
 | Breaking Changes im Client brechen das Sync-Repo | SemVer, klar definierte öffentliche API, Release-Notes. Das Sync-Repo pinnt auf eine Minor-Version |
-| Versionskonflikte der Abhängigkeiten im Sync-Repo | nur zwei Laufzeit-Abhängigkeiten, Untergrenzen statt Pins, CI-Matrix 3.11–3.15 |
+| Versionskonflikte der Abhängigkeiten im Sync-Repo | nur drei Laufzeit-Abhängigkeiten (httpx, pydantic, tzdata), Untergrenzen statt Pins, CI-Matrix 3.11–3.15 |
 | Der Fake weicht vom echten API-Verhalten ab, die Tests im Sync-Repo wiegen dann in falscher Sicherheit | Fake nach AP 6 angleichen. Dieselben Szenarien laufen gegen den Fake und als Integrationstest gegen den Tenant |
 | weclapp ignoriert unbekannte Filter stillschweigend | Feldnamen vor dem Request prüfen, `find_one` mit Mehrdeutigkeits-Check |
 | Doppelte Anlage nach einem Timeout bei `POST` | kein Retry bei unklarem Ausgang. Dokumentierte Garantie: Das Sync-Repo sucht vor dem Anlegen |
