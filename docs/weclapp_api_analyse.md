@@ -66,8 +66,8 @@ Für „nur verwaltete“ Mitarbeiter heißt das:
 - Wir legen einen `user` mit **`status = NOT_ACTIVE`** an, ohne `licenses`, ohne
   `userRoles` und mit `canEditDashboard = false`. Danach legen wir den `employee` mit
   diesem `userId` an.
-- Den Endpunkt **`/user/id/{id}/invite` rufen wir nicht auf**, damit keine Einladungs-Mail
-  rausgeht.
+- Die Einladungsmail verschickt nur der Endpunkt **`/user/id/{id}/invite`**. Ursprünglich sollte er nicht
+  genutzt werden. Seit 02.11.2026 soll das Sync-Repo neue User damit einladen ([#35](https://github.com/Hochfrequenz/weclapp_client.py/issues/35)).
 - **`email` ist Pflicht, muss aber nicht eindeutig sein** (✅ P4, Abschnitt 10). Jeder
   Mitarbeiter braucht also eine E-Mail-Adresse, und wer anlegt, prüft Dubletten selbst.
 
@@ -129,6 +129,7 @@ b), können wir später zusätzlich oder stattdessen die echte `employeeNumber` 
 | `/employee` | `GET` | Personalakte zum User finden: `userId-eq=<id>` |
 | `/employee` | `POST` | Personalakte anlegen (`userId`, `birthDate`) |
 | `/employee/id/{id}` | `GET`, `PUT` | Geburtsdatum aktualisieren |
+| `/user/id/{id}/invite` | `POST` | Einladungsmail an einen neuen User. Body: leeres Objekt. Es gibt **kein `dryRun`**, jeder Aufruf verschickt die Mail ([#35](https://github.com/Hochfrequenz/weclapp_client.py/issues/35)) |
 
 Bei allen `GET`-Listen nutzen wir `pageSize` bis 1000. Beim Anlegen und Ändern ist
 `dryRun=true` für einen Probelauf möglich.
@@ -147,7 +148,6 @@ Bei allen `GET`-Listen nutzen wir `pageSize` bis 1000. Beim Anlegen und Ändern 
 | Endpunkt | Grund |
 |---|---|
 | `/webhook` | Wir schieben nach weclapp und müssen nicht auf Änderungen in weclapp reagieren |
-| `/user/id/{id}/invite` | Soll bewusst **nicht** genutzt werden (A3) |
 | `/personDepartment`, `/personRole`, `/salesTeam`, `/costCenter` | Betreffen CRM-Kontakte, Vertrieb bzw. Controlling, nicht HR-Stammdaten |
 | `/absenceType`, `/timeRecord`, `/calendarEvent` | Bewegungsdaten, keine Stammdaten |
 | MFA-Endpunkte, `userImage` | Nicht relevant |
@@ -312,12 +312,16 @@ dem Tenant.
 | P11 | Kein User hat mehr als eine Personalakte. Ein Dry-Run für eine zweite Personalakte wird mit 400 abgewiesen, `validationErrors` vom Typ `consistency`. | `FakeWeclapp` meldet den Fall jetzt ebenfalls als `consistency` |
 | P12 | `mobilePhoneNumber` (30.10.2026, [#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)): Die vorhandenen Nummern stehen fast alle im Format `+49 151 12345678`, also international mit Leerzeichen. weclapp speichert die Nummer unverändert und prüft das Format nicht, auch nationale Nummern oder Text nimmt ein Dry-Run an. Mehr als 100 Zeichen weist es mit 400 ab (`validationErrors` vom Typ `size`). | `mobile_phone_number` an `User`, `UserCreate` und `UserUpdate`, höchstens 100 Zeichen. Das Sync-Repo sendet das übliche Format und kann beim Vergleich exakt vergleichen |
 | P13 | Auswahlwerte (30.10.2026, [#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)): `selectableValues` einer `LIST`-Definition sind Entitäten mit `id`, `version`, `value` (die Bezeichnung), `active`, `defaultValue` und `positionNumber` (beginnt bei 1). Ein Dry-Run mit dem Auswahlwert einer anderen Definition oder einer unbekannten ID wird mit 400 abgewiesen, ohne `validationErrors`, nur mit `detail` „invalid selectable value id: …“. | `CustomAttributeDefinition.selectable_values` mit `CustomAttributeListValue`. `FakeWeclapp` nimmt Auswahlwerte an und weist fremde IDs genauso ab |
+| P14 | Einladung (02.11.2026, [#35](https://github.com/Hochfrequenz/weclapp_client.py/issues/35)): `POST /user/id/{id}/invite` mit einer User-ID, die es nicht gibt, beantwortet weclapp mit 404 (`not_found`). Weiter geht ein Test ohne echte Mail nicht, weil die Aktion kein `dryRun` kennt. | `client.users.invite(user_id)`. Der Client wiederholt den Aufruf nicht, wenn sein Ausgang unklar ist. `FakeWeclapp` nimmt Einladungen für jeden bekannten User an und merkt sie sich in `invitations` |
 
 **Noch offen**, zu klären mit dem ersten echten Lauf des Sync-Repos (ein User, eine Personalakte):
 
 - P2: selbst prüfen, dass keine Mail rausgeht
 - P4: Wie vergibt weclapp `username` bei einem per API angelegten User, z. B. in Kleinschreibung?
 - P9: minimale Rechte eines technischen API-Users. Laut Anleitung arbeitet die API mit dem Token eines Admin-Benutzers.
+- P14: Ist die Mail dieselbe wie über den Button in der Oberfläche? Was passiert beim zweiten Aufruf für denselben
+  User? Was braucht der User dafür (Status, Lizenz, E-Mail), und welche Fehler kommen sonst? Welche Rechte braucht
+  der Token? Das lässt sich nur mit einer echten Einladung klären, einmal von Hand und mit Freigabe.
 
 `PUT /employee` (P7) braucht das Sync-Repo nicht, weil es nur anlegt.
 

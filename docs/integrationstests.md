@@ -1,6 +1,6 @@
 # Integrationstests gegen einen weclapp-Tenant (AP 6)
 
-Die Integrationstests prüfen die Punkte P1–P13 aus dem [Umsetzungsplan](umsetzungsplan.md), also das Verhalten
+Die Integrationstests prüfen die Punkte P1–P14 aus dem [Umsetzungsplan](umsetzungsplan.md), also das Verhalten
 der echten weclapp-API, auf das sich Client und `FakeWeclapp` verlassen. Sie liegen in `unittests/integration/` und
 werden ohne Zugangsdaten automatisch übersprungen, auch in der CI.
 
@@ -8,7 +8,7 @@ werden ohne Zugangsdaten automatisch übersprungen, auch in der CI.
 
 | Schritt | Marker | Was passiert | Geeignet für |
 |---|---|---|---|
-| Stufe 1 | `integration` | nur Lesezugriffe und Dry-Runs (`dryRun=true`), keine Änderungen | Test-Tenant **und** Produktiv-Tenant |
+| Stufe 1 | `integration` | nur Lesezugriffe und Dry-Runs (`dryRun=true`), keine Änderungen. Dazu eine Einladung an eine User-ID, die es nicht gibt (P14) | Test-Tenant **und** Produktiv-Tenant |
 | Stufe 2 | `integration_write` | legt genau einen Test-User mit einer Personalakte an, alles Weitere nur lesend oder als Dry-Run. Die Datensätze bleiben für die manuellen Prüfungen stehen | Test-Tenant, im Produktiv-Tenant nur nach Absprache |
 | Aufräumen | `integration_cleanup` | löscht die Personalakten der Test-User und dann die User selbst | nach den manuellen Prüfungen |
 
@@ -100,6 +100,18 @@ Prüfungen eines echten Requests durchläuft. Stufe 2 prüft das echte Verhalten
 - Antworten aus einem echten Tenant dürfen **nicht** als Fixtures ins Repo, auch nicht anonymisiert.
 - Dry-Runs mit echten Daten (P4: vorhandene E-Mail-Adresse, P11: vorhandener User) laufen erst, nachdem ein Test
   bestätigt hat, dass ein Dry-Run nichts speichert.
+
+## Einladung von Hand prüfen (P14)
+
+`POST /user/id/{id}/invite` kennt kein `dryRun`, jeder Aufruf verschickt eine echte Mail. Deshalb gibt es dafür
+keinen automatischen Test. Die offenen Punkte einmal von Hand klären, nur mit Freigabe und mit einem User, der die
+Mail bekommen darf (z. B. der Testperson aus dem ersten Lauf des Sync-Repos):
+
+1. `client.users.invite(user_id)` aufrufen und prüfen, ob dieselbe Mail ankommt wie über den Button in der Oberfläche.
+2. Denselben User ein zweites Mal einladen: zweite Mail, Fehler oder nichts?
+3. Wenn möglich, einen User ohne Lizenz oder mit `NOT_ACTIVE` einladen und die Fehlerantwort notieren.
+
+Die Befunde kommen ohne Daten aus dem Tenant in die [Analyse](weclapp_api_analyse.md) (P14).
 
 ## Nach dem Lauf
 
