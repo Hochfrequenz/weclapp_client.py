@@ -129,6 +129,24 @@ def test_user_with_licenses_roles_and_typed_attributes(fake: FakeWeclapp, client
     ]
 
 
+def test_invite_user(fake: FakeWeclapp, client: WeclappClient) -> None:
+    user = fake.add_user(email="a@example.com")
+
+    assert client.users.invite(user.id) == user
+    client.users.invite(user.id)
+
+    assert fake.invitations == [user.id, user.id]
+    assert [request.path for request in fake.write_requests] == [f"user/id/{user.id}/invite"] * 2
+
+
+def test_invite_unknown_user_or_invalid_body(fake: FakeWeclapp, client: WeclappClient) -> None:
+    with pytest.raises(NotFoundError):
+        client.users.invite("999")
+    user = fake.add_user(email="a@example.com")
+    assert _raw(fake, "POST", f"user/id/{user.id}/invite", json=[]).status_code == 400
+    assert fake.invitations == []
+
+
 def test_mobile_phone_number_round_trip(fake: FakeWeclapp, client: WeclappClient) -> None:
     created = client.users.create(_new_user(mobile_phone_number="+49 151 12345678"))
     added = fake.add_user(email="b@example.com", mobile_phone_number="+49 30 1234567")
