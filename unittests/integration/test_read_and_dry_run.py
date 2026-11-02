@@ -357,6 +357,19 @@ def test_unknown_ids_raise_not_found(client: WeclappClient, report: IntegrationR
     report.finding("P10", f"404: problem_type={error_info.value.problem_type}")
 
 
+def test_invite_unknown_user(client: WeclappClient, report: IntegrationReport) -> None:
+    """
+    weclapp has no dry run for the invitation, so tier 1 only invites an id that does not exist: it checks the path
+    and the error without any user who could get a mail (P14).
+    """
+    unknown_id = "0"
+    with pytest.raises(NotFoundError):
+        client.users.get(unknown_id)
+    with pytest.raises(NotFoundError) as error_info:
+        client.users.invite(unknown_id)
+    report.finding("P14", f"Einladung an eine unbekannte User-ID: 404, problem_type={error_info.value.problem_type}")
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # partial updates and optimistic locking (P7, P10), probed as dry runs on the API user itself
 
