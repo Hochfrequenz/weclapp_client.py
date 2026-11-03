@@ -1,9 +1,9 @@
 """
 In-memory fake of the weclapp endpoints used by this client, for tests without a weclapp tenant.
 
-The fake implements ``/user``, ``/employee``, ``/customAttributeDefinition``, ``/workScheduleProfile`` and
-``/user/currentUser`` as an ``httpx.MockTransport`` and mimics the behaviour of the real API where it matters for
-synchronisation logic:
+The fake implements ``/user`` (with ``/user/currentUser`` and ``/user/id/{id}/invite``), ``/employee``,
+``/customAttributeDefinition`` and ``/workScheduleProfile`` as an ``httpx.MockTransport`` and mimics the behaviour of
+the real API where it matters for synchronisation logic:
 
 - ids, ``version`` (incremented with every change), ``createdDate``/``lastModifiedDate``, ``username``,
   ``employeeNumber`` and the ids of work schedule profile assignments are assigned by the fake
@@ -16,6 +16,8 @@ synchronisation logic:
   references to unknown users or work schedule profiles are answered with ``400``, like a selected value that does not
   belong to the definition of a list attribute
 - ``dryRun=true`` validates without storing and answers without meta properties
+- ``POST /user/id/{id}/invite`` is accepted for every known user and recorded in ``invitations``; what weclapp
+  requires of the user and what a second invitation does is not known yet, so the fake checks neither
 
 Like weclapp, the fake accepts several users with the same e-mail address; every user has at most one employee
 (both observed in a real tenant, see the API analysis).
@@ -346,6 +348,7 @@ class FakeWeclapp:
         self._store: dict[str, dict[str, dict[str, Any]]] = {resource: {} for resource in _RULES}
         self._failures: list[_Failure] = []
         self._requests: list[RecordedRequest] = []
+        self._invitations: list[str] = []
 
     # ------------------------------------------------------------------------------------------------------------------
     # test API
@@ -490,6 +493,11 @@ class FakeWeclapp:
         ]
 
     @property
+    def invitations(self) -> list[str]:
+        """the ids of the users invited so far, in the order of the calls (a user invited twice appears twice)"""
+        return list(self._invitations)
+
+    @property
     def requests(self) -> list[RecordedRequest]:
         """all requests received so far"""
         return list(self._requests)
@@ -581,7 +589,18 @@ class FakeWeclapp:
                 return httpx.Response(200, json=self._render(entity))
             if method == "PUT" and rules.writable_via_api:
                 return self._update(resource, rules, entity, body, params)
+        if len(parts) == 4 and parts[0] == "user" and parts[1] == "id" and parts[3] == "invite" and method == "POST":
+            return self._invite(parts[2], body)
         return _problem(405, "method_not_allowed", "operation not supported by the fake")
+
+    def _invite(self, user_id: str, body: Any) -> httpx.Response:
+        user = self._store["user"].get(user_id)
+        if user is None:
+            return _problem(404, "not_found", "entity not found")
+        if not isinstance(body, dict):
+            return _problem(400, "invalid_json", "the request body must be a JSON object")
+        self._invitations.append(user_id)
+        return httpx.Response(200, json={"result": self._render(user)})
 
     def _list(self, resource: str, rules: _ResourceRules, params: httpx.QueryParams) -> httpx.Response:
         try:

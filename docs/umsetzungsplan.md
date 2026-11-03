@@ -48,9 +48,10 @@ API v2. Sie ist beschränkt auf die Endpunkte `/user`, `/employee`,
 | Prüfung des API-Verhaltens am Test-Tenant, dokumentiert in der Analyse | Betrieb: Zeitplan, Hosting, Secrets, Monitoring |
 | Versionierte Releases | Einbindung einer festen Client-Version |
 
-**Nicht im Client (Phase 1):** Löschen bzw. `softDelete`, Einladungen (`invite`), Rollen,
-Lizenzen, Webhooks, weitere Felder. Braucht das Sync-Repo davon etwas, lässt es sich
-nachrüsten (siehe Abschnitt 10).
+**Nicht im Client (Phase 1):** Löschen bzw. `softDelete`, Webhooks, weitere Felder. Braucht das
+Sync-Repo davon etwas, lässt es sich nachrüsten (siehe Abschnitt 10). Rollen, Lizenzen und
+Einladungen hat das Sync-Repo gebraucht, sie sind inzwischen drin
+([#32](https://github.com/Hochfrequenz/weclapp_client.py/pull/32), [#35](https://github.com/Hochfrequenz/weclapp_client.py/issues/35)).
 
 ---
 
@@ -102,6 +103,7 @@ sobald das Sync-Repo angelegt ist (K3, [#12](https://github.com/Hochfrequenz/wec
 | Personalnummer am User lesen und setzen | `user.custom_attribute(definition.id)`, `CustomAttribute.of_string(definition.id, "00042")` |
 | Personalakte zum User finden | `client.employees.for_user(user.id)` |
 | Anlegen | `client.users.create(UserCreate(...))`, `client.employees.create(EmployeeCreate(...))` |
+| Einladungsmail an einen neuen User | `client.users.invite(user.id)` (kein Probelauf möglich) |
 | Ändern mit Optimistic Locking | `client.users.update(user, UserUpdate(...))`, `client.employees.update(employee, EmployeeUpdate(...))` |
 | Probelauf | `dry_run=True` bei `create` und `update` |
 | Einzelfehler von systemischen Fehlern unterscheiden | Exception-Hierarchie (AP 1) |
@@ -412,7 +414,8 @@ strict, codespell, Packaging, Dev-Umgebung, BOM-Check.
 
 ### AP 4 – Konkrete Ressourcen und Client-Fassade
 
-- `client.users` (`/user`): die Operationen aus AP 3 plus `current()` (`/user/currentUser`).
+- `client.users` (`/user`): die Operationen aus AP 3 plus `current()` (`/user/currentUser`) und
+  `invite(user_id)` (`/user/id/{id}/invite`).
 - `client.employees` (`/employee`): die Operationen aus AP 3 plus `for_user(user_id)`.
 - `client.custom_attribute_definitions` (`/customAttributeDefinition`): `get_by_key(key)`
   lädt die Definitionen einmal (mit Cache) und sucht lokal nach dem Key. Fehlt das Attribut
@@ -498,6 +501,7 @@ Prüfpunkte (die ⚠-Punkte aus der Analyse):
 | P11 | Kann ein User mehrere Personalakten haben? (Der Fake nimmt an: nein) | zweiten `POST /employee` für denselben User | Fake, Doku für das Sync-Repo |
 | P12 | Format und Länge von `mobilePhoneNumber` am User ([#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)) | vorhandene Nummern lesen, Dry-Runs | `UserCreate`, Doku für das Sync-Repo |
 | P13 | Aufbau der Auswahlwerte (`selectableValues`) und Prüfung von `selectedValueId` ([#33](https://github.com/Hochfrequenz/weclapp_client.py/issues/33)) | Definitionen lesen, Dry-Runs | `CustomAttributeDefinition`, Fake |
+| P14 | Einladung per `POST /user/id/{id}/invite` ([#35](https://github.com/Hochfrequenz/weclapp_client.py/issues/35)): dieselbe Mail wie in der Oberfläche? Zweiter Aufruf? Voraussetzungen und Fehler? Rechte? | unbekannte ID in Stufe 1, alles andere einmal von Hand mit Freigabe (kein `dryRun`) | `users.invite()`, Fake, Doku für das Sync-Repo |
 
 - Die Integrationstests liegen in `unittests/integration/`. Sie laufen nur, wenn
   `WECLAPP_API_TOKEN` und `WECLAPP_BASE_URL` bzw. `WECLAPP_TENANT` gesetzt sind, also nicht in der CI.
@@ -623,6 +627,6 @@ sie beim Start des Sync-Repos nicht verloren gehen. Die Issues liegen inzwischen
 - Weitere Felder in den Modellen, sobald das Sync-Repo sie braucht, z. B. Eintritt und
   Austritt, Beschäftigungsstatus, geschäftliche Kontaktdaten.
 - Weitere Operationen bei Bedarf: `softDelete` für User und `DELETE` für Employees (für das
-  Offboarding), `invite`.
+  Offboarding).
 - Eine async-Variante des Clients.
 - Ein automatischer Abgleich der Modelle mit der aktuellen weclapp-Spec als geplanter Workflow.

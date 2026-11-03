@@ -7,7 +7,8 @@
 
 A typed Python client for the [weclapp REST API v2](https://www.weclapp.com/api/).
 It deliberately covers only the endpoints needed to synchronise employee master data into weclapp:
-`/user`, `/employee`, `/customAttributeDefinition`, `/workScheduleProfile` and `/user/currentUser`.
+`/user` (with `/user/currentUser` and `/user/id/{id}/invite`), `/employee`, `/customAttributeDefinition` and
+`/workScheduleProfile`.
 
 The synchronisation logic itself (matching, diffing, reporting) lives in a separate repository that uses this package
 as a dependency.
@@ -88,6 +89,8 @@ with WeclappClient(WeclappConfig.from_env()) as client:
 - `create()` and `update()` accept `dry_run=True`: weclapp validates the data without storing it, and the method
   returns `None` (weclapp does not assign ids in dry runs).
 - weclapp assigns the `username` of a user itself; it is read-only and usually equals the e-mail address.
+- `users.invite(user_id)` sends weclapp's invitation mail. weclapp has no dry run for it, so every call sends a mail,
+  and like any `POST`, the call is not repeated if its outcome is unclear.
 - weclapp stores `mobile_phone_number` as sent, without checking or normalising the format (at most 100 characters).
 - `CustomAttributeDefinition.selectable_values` lists the values of a `LIST` attribute with id and label (`value`).
   weclapp rejects the id of a value that belongs to another attribute.
@@ -182,7 +185,8 @@ def test_timeout_while_creating_an_employee() -> None:
   weclapp, the fake rejects employees with an unknown work schedule profile, so add the profiles your code uses.
   `add_custom_attribute_definition(attribute_type=CustomAttributeType.LIST, selectable_values=["Bayern", ...])` adds
   a list attribute; like weclapp, the fake then rejects the id of any value that does not belong to it.
-- `users`, `employees`, `requests` and `write_requests` show the state and the requests received.
+- `users`, `employees`, `requests` and `write_requests` show the state and the requests received; `invitations`
+  lists the ids of the invited users, once per call.
 - `fail_next()` lets the next matching request fail with a status code or an exception.
 - Like weclapp, the fake accepts several users with the same e-mail address, so check for an existing user yourself
   before creating one. A user has at most one employee.

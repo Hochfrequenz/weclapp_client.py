@@ -8,6 +8,7 @@ from weclapp_client import (
     CustomAttributeDefinitionError,
     Filter,
     InvalidQueryError,
+    ServerError,
     WeclappClient,
     WeclappError,
 )
@@ -59,6 +60,28 @@ def test_current_user_with_unexpected_response() -> None:
     router = _Router({"user/currentUser": _json(load_fixture("user"))})
     with pytest.raises(WeclappError):
         _client(router).users.current()
+
+
+def test_invite_user() -> None:
+    router = _Router({"user/id/4711/invite": _json({"result": load_fixture("user")})})
+    user = _client(router).users.invite("4711")
+    assert user.id == "4711"
+    assert router.requests[0].method == "POST"
+    assert router.requests[0].content == b"{}"
+
+
+def test_invite_is_not_repeated_after_a_gateway_error() -> None:
+    # the mail may have been sent, so the request must not be sent again
+    router = _Router({"user/id/4711/invite": _json({"status": 503, "title": "unavailable"}, status=503)})
+    with pytest.raises(ServerError):
+        _client(router).users.invite("4711")
+    assert len(router.requests) == 1
+
+
+def test_invite_with_unexpected_response() -> None:
+    router = _Router({"user/id/4711/invite": _json(load_fixture("user"))})
+    with pytest.raises(WeclappError):
+        _client(router).users.invite("4711")
 
 
 def test_find_user_by_personnel_number() -> None:
